@@ -28,6 +28,7 @@ def _extract_text(response) -> str:
         return content.strip()
 
     if isinstance(content, list):
+        print(f"content: {content}")  # Debug: show the raw content list
         parts = []
         for block in content:
             if isinstance(block, dict):

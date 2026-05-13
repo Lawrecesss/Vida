@@ -3,7 +3,7 @@ import os
 import random
 from helpers.extract_frame import extract_frames, cleanup_frames
 from helpers.video_segmentation import parallel_video_segmentation as cut_segments, get_video_duration
-from models.models import video_analysis_model_with_reasoning, video_analysis_model_without_reasoning, reasoning_model_response
+from models.models import OVERLAP, video_analysis_model_with_reasoning, video_analysis_model_without_reasoning, reasoning_model_response
 from prompts.prompts import build_video_prompt, build_frames_prompt
 
 async def analyze_segment(index: int, segment_path: str, semaphore: asyncio.Semaphore, user_query: str = None, retries: int = 3, is_original: bool = False) -> dict:
@@ -50,7 +50,7 @@ async def synthesize(results: list[dict], user_query: str = None) -> str:
     response = await reasoning_model_response(timeline, user_query)
     return response.choices[0].message.content
 
-async def process_video(video_path: str, user_query: str = None):
+async def video_analyzer(video_path: str, user_query: str = None):
     # FEATURE: Logic to check range
     file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
     duration = get_video_duration(video_path)
@@ -71,7 +71,7 @@ async def process_video(video_path: str, user_query: str = None):
         return {"segments": results, "summary": summary}
 
 if __name__ == "__main__":
-    result = asyncio.run(process_video(
+    result = asyncio.run(video_analyzer(
         video_path="test_video.mp4",
         user_query="What is the main topic?"
     ))

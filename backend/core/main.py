@@ -1,9 +1,13 @@
-import hands.tools as hand_tools
+import hands.video_analyzer as tools
+import asyncio
 
 if __name__ == "__main__":
-    final_summary = hand_tools.video_analysis(
-        "/Users/lawrence/Projects/VidA/vids/test2.mp4",
-        "Categorize the content of this video into one word categories, and list the key events in this video?",
-        max_workers=4,   # ← tune this
-    )
-    print("\nFinal Summary:\n", final_summary)
+    result = asyncio.run(tools.video_analyzer(
+        video_path="/Users/lawrence/Projects/VidA/vids/vlog.mp4",
+        user_query="What is the main topic and key events in this video?"
+    ))
+
+    # for seg in result["segments"]:
+    #     print(f"\n[Seg {seg['index'] + 1} | {seg['mode']}]\n{seg['analysis']}")
+
+    print(f"\n── Final Summary ──\n{result['summary']}")

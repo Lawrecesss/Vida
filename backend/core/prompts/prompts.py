@@ -1,5 +1,4 @@
-from helpers.encode_file import encode_file
-
+from core.helpers.encode_file import encode_file
 
 def build_video_prompt(index: int, segment_path: str, user_query: str = None) -> list:
     return [

@@ -1,13 +1,32 @@
-import hands.video_analyzer as tools
 import asyncio
+from brain.brain import run_agent
+
+async def main():
+    test_cases = [
+        {
+            "label": "General summary",
+            "message": "Can you analyze this video and tell me what it's about? The file is at /Users/lawrence/Projects/VidA/vids/vlog.mp4"
+        },
+        {
+            "label": "Specific query",
+            "message": "What are the key events in /Users/lawrence/Projects/VidA/vids/vlog.mp4?"
+        },
+        {
+            "label": "Missing file",
+            "message": "Analyze the video at /nonexistent/path/video.mp4"
+        },
+    ]
+
+    for case in test_cases:
+        print(f"\n{'='*60}")
+        print(f"🧪 Test: {case['label']}")
+        print(f"💬 Message: {case['message']}")
+        print(f"{'='*60}")
+        try:
+            response = await run_agent(case["message"])
+            print(f"✅ Response:\n{response}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
-    result = asyncio.run(tools.video_analyzer(
-        video_path="/Users/lawrence/Projects/VidA/vids/vlog.mp4",
-        user_query="What is the main topic and key events in this video?"
-    ))
-
-    # for seg in result["segments"]:
-    #     print(f"\n[Seg {seg['index'] + 1} | {seg['mode']}]\n{seg['analysis']}")
-
-    print(f"\n── Final Summary ──\n{result['summary']}")
+    asyncio.run(main())

@@ -1,4 +1,4 @@
-"""Exception hierarchy for the VidA SDK.
+"""Exception hierarchy for the Vida SDK.
 
 Every error raised by the SDK derives from :class:`VidaError`, so callers can
 wrap an entire pipeline in a single ``except VidaError``.

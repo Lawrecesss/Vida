@@ -20,7 +20,7 @@ asyncio.run(main())
 ## Why it's quick
 
 The slow part of this problem is long media, and long media is embarrassingly
-parallel. VidA leans on that:
+parallel. Vida leans on that:
 
 - **Audio, not video, goes to the ASR model.** A one-hour video becomes ~30 MB
   of 16 kHz mono FLAC instead of gigabytes of H.264.
@@ -40,7 +40,7 @@ pip install 'vida[local]'     # faster-whisper, fully offline
 pip install 'vida[all]'       # everything, including the chat agent
 ```
 
-You also need **ffmpeg**. A system install is used when present; otherwise VidA
+You also need **ffmpeg**. A system install is used when present; otherwise Vida
 falls back to the binary bundled with `imageio-ffmpeg`, which is a core
 dependency — so it works out of the box either way.
 

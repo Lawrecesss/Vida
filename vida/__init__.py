@@ -1,4 +1,4 @@
-"""VidA — fast video analysis, transcription, and translation.
+"""Vida — fast video analysis, transcription, and translation.
 
 Quick start::
 

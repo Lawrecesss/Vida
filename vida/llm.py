@@ -44,8 +44,8 @@ class OpenRouterClient:
         *,
         timeout: float = 180.0,
         max_retries: int = 3,
-        referer: str = "https://github.com/lhshein/VidA",
-        title: str = "VidA SDK",
+        referer: str = "https://github.com/Lawrecesss/vida",
+        title: str = "Vida SDK",
     ) -> None:
         if not api_key:
             raise ConfigurationError(

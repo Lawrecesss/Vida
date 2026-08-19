@@ -1,4 +1,4 @@
-"""FastAPI application wrapping the VidA SDK."""
+"""FastAPI application wrapping the Vida SDK."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ async def lifespan(_app: FastAPI):
     await close_vida()
 
 
-app = FastAPI(title="VidA API", version=__version__, lifespan=lifespan)
+app = FastAPI(title="Vida API", version=__version__, lifespan=lifespan)
 
 # Comma-separated origins, e.g. "https://app.example.com,https://admin.example.com".
 # Defaults to the local Next.js dev server rather than "*", which would let any

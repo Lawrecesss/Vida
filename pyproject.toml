@@ -47,7 +47,7 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6"]
 vida = "vida.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/lhshein/VidA"
+Homepage = "https://github.com/Lawrecesss/vida"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vida"]

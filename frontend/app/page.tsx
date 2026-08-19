@@ -1,249 +1,392 @@
-"use client"
-import { useState, useRef } from "react";
+"use client";
+
+import { useCallback, useRef, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-export default function VideoUpload() {
-  const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<string>('...');
-  const [prompt, setPrompt] = useState<string>("");
-  const [result, setResult] = useState<string>("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+const LANGUAGES = [
+  "Spanish", "French", "German", "Japanese", "Korean",
+  "Chinese", "Burmese", "Thai", "Hindi", "Arabic", "Portuguese",
+];
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setFile(e.target.files[0]);
-      setResult("");
-      setStatus('...');
-    }
+type Status = "idle" | "uploading" | "working" | "done" | "cancelled" | "failed";
+
+type UploadInfo = {
+  video_path: string;
+  filename: string;
+  size_mb: number;
+  duration: number;
+  has_audio: boolean;
+};
+
+type Translation = { language: string; text: string; srt: string };
+
+function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function downloadText(filename: string, body: string) {
+  const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function Home() {
+  const [file, setFile] = useState<File | null>(null);
+  const [upload, setUpload] = useState<UploadInfo | null>(null);
+  const [status, setStatus] = useState<Status>("idle");
+  const [stage, setStage] = useState("");
+  const [error, setError] = useState("");
+
+  const [wantTranscript, setWantTranscript] = useState(true);
+  const [wantAnalysis, setWantAnalysis] = useState(false);
+  const [targets, setTargets] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+
+  const [transcript, setTranscript] = useState("");
+  const [detectedLanguage, setDetectedLanguage] = useState("");
+  const [translations, setTranslations] = useState<Translation[]>([]);
+  const [summary, setSummary] = useState("");
+  const [activeTab, setActiveTab] = useState("transcript");
+
+  const abortRef = useRef<AbortController | null>(null);
+  const busy = status === "uploading" || status === "working";
+
+  const reset = () => {
+    setTranscript("");
+    setTranslations([]);
+    setSummary("");
+    setDetectedLanguage("");
+    setError("");
+    setStage("");
   };
 
-  const handleUpload = async () => {
+  const handleFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const chosen = event.target.files?.[0];
+    if (!chosen) return;
+    setFile(chosen);
+    setUpload(null);
+    setStatus("idle");
+    reset();
+  };
+
+  const toggleTarget = (language: string) => {
+    setTargets((current) =>
+      current.includes(language)
+        ? current.filter((item) => item !== language)
+        : [...current, language],
+    );
+  };
+
+  const run = useCallback(async () => {
     if (!file) return;
 
     abortRef.current = new AbortController();
-    setResult("");
-    setIsStreaming(true);
+    const { signal } = abortRef.current;
+    reset();
+    setStatus("uploading");
 
     try {
-      // Step 1: Upload the file
-      setStatus('Uploading...');
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch(`${API_BASE}/upload`, {
-        method: "POST",
-        body: formData,
-        signal: abortRef.current.signal,
-      });
+      let media = upload;
 
-      if (!uploadRes.ok) throw new Error("Upload failed");
-      const { video_path } = await uploadRes.json();
+      // Skip re-uploading if this file is already on the server.
+      if (!media) {
+        const form = new FormData();
+        form.append("file", file);
+        const response = await fetch(`${API_BASE}/upload`, {
+          method: "POST",
+          body: form,
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error((await response.json()).detail ?? "Upload failed");
+        }
+        media = (await response.json()) as UploadInfo;
+        setUpload(media);
+      }
 
-      // Step 2: Stream the analysis
-      setStatus('Analyzing...');
-      const message = prompt.trim()
-        ? `Analyze the video at ${video_path}. ${prompt}`
-        : `Analyze the video at ${video_path} and summarize its main topic and key events.`;
+      setStatus("working");
+      setStage("starting");
 
-      const streamRes = await fetch(`${API_BASE}/chat/stream`, {
+      const response = await fetch(`${API_BASE}/process/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-        signal: abortRef.current.signal,
+        body: JSON.stringify({
+          video_path: media.video_path,
+          transcribe: wantTranscript || targets.length > 0,
+          analyze: wantAnalysis,
+          translate_to: targets,
+          query: query.trim() || null,
+        }),
+        signal,
       });
+      if (!response.ok || !response.body) {
+        throw new Error("The server rejected the request");
+      }
 
-      if (!streamRes.ok) throw new Error("Analysis failed");
-
-      const reader = streamRes.body!.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      // SSE frames can straddle a network read, so hold a buffer and only
+      // consume complete `\n\n`-terminated frames.
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const lines = decoder.decode(value).split("\n\n");
-        for (const line of lines) {
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          const line = frame.trim();
           if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6);
-          if (data === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) throw new Error(parsed.error);
-            if (parsed.chunk) setResult(prev => prev + parsed.chunk);
-          } catch { /* incomplete JSON chunk, skip */ }
+          const payload = line.slice(6);
+          if (payload === "[DONE]") continue;
+
+          const event = JSON.parse(payload);
+          switch (event.event) {
+            case "status":
+              setStage(event.language ? `translating → ${event.language}` : event.stage);
+              break;
+            case "transcript":
+              setTranscript(event.text);
+              setDetectedLanguage(event.language ?? "");
+              setActiveTab("transcript");
+              break;
+            case "translation":
+              setTranslations((current) => [
+                ...current,
+                { language: event.language, text: event.text, srt: event.srt },
+              ]);
+              break;
+            case "analysis":
+              setSummary(event.summary);
+              break;
+            case "error":
+              throw new Error(event.detail);
+          }
         }
       }
 
-      setStatus('Completed');
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") {
-        setStatus('Cancelled');
-      } else {
-        console.error(err);
-        setStatus('Failed');
+      setStage("");
+      setStatus("done");
+    } catch (caught: unknown) {
+      if (caught instanceof Error && caught.name === "AbortError") {
+        setStatus("cancelled");
+        return;
       }
-    } finally {
-      setIsStreaming(false);
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setStatus("failed");
     }
-  };
+  }, [file, upload, wantTranscript, wantAnalysis, targets, query]);
 
-  const handleCancel = () => {
-    abortRef.current?.abort();
-  };
-
-  const isProcessing = isStreaming;
-  const statusStyle =
-    status === 'Failed' ? 'bg-red-50 border-red-200 text-red-700' :
-    status === 'Completed' ? 'bg-green-50 border-green-200 text-green-700' :
-    status === 'Cancelled' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
-    'bg-blue-50 border-blue-200 text-blue-700';
+  const tabs = [
+    ...(transcript ? [{ id: "transcript", label: `Transcript${detectedLanguage ? ` (${detectedLanguage})` : ""}` }] : []),
+    ...translations.map((item) => ({ id: item.language, label: item.language })),
+    ...(summary ? [{ id: "analysis", label: "Analysis" }] : []),
+  ];
+  const hasOutput = tabs.length > 0;
+  const current = translations.find((item) => item.language === activeTab);
 
   return (
-    <div className="min-h-svh bg-linear-to-br from-slate-50 to-slate-100 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">VidA</h1>
-          <p className="text-slate-600">Upload and analyze your videos with AI-powered insights</p>
-        </div>
+    <div className="min-h-svh bg-slate-50 text-slate-900">
+      <div className="mx-auto max-w-6xl px-6 py-12">
+        <header className="mb-10">
+          <h1 className="text-3xl font-bold tracking-tight">VidA</h1>
+          <p className="mt-1 text-slate-600">
+            Transcribe, translate, and analyze video.
+          </p>
+        </header>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Upload Section */}
-          <div className="bg-white rounded-xl shadow-lg p-8 border border-slate-200">
-            <div className="flex items-center mb-6">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-blue-600 font-bold">1</span>
-              </div>
-              <h2 className="text-2xl font-semibold text-slate-900">Upload Video</h2>
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_1fr]">
+          {/* ---------------- Controls ---------------- */}
+          <section className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div>
+              <input
+                id="video"
+                type="file"
+                accept="video/*,audio/*"
+                onChange={handleFile}
+                className="hidden"
+              />
+              <label
+                htmlFor="video"
+                className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 p-8 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40"
+              >
+                <span className="font-medium text-blue-600">Choose a video or audio file</span>
+                <span className="mt-1 text-sm text-slate-500">MP4, MOV, MP3, WAV…</span>
+              </label>
             </div>
 
-            <div className="space-y-6">
-              {/* File Input */}
-              <div>
-                <input
-                  id="videoUpload"
-                  type="file"
-                  accept="video/*"
-                  required
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                <label
-                  htmlFor="videoUpload"
-                  className="flex flex-col items-center justify-center w-full p-8 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors bg-blue-50/30"
-                >
-                  <div className="text-center">
-                    <svg className="w-12 h-12 text-blue-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    <p className="text-blue-600 font-semibold">Select a video file</p>
-                    <p className="text-slate-500 text-sm mt-1">or drag and drop</p>
-                  </div>
-                </label>
+            {file && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="truncate font-medium">{file.name}</p>
+                <p className="mt-0.5 text-slate-500">
+                  {(file.size / 1024 / 1024).toFixed(1)} MB
+                  {upload && ` · ${formatDuration(upload.duration)}`}
+                  {upload && !upload.has_audio && " · no audio track"}
+                </p>
               </div>
+            )}
 
-              {/* File Selected Display */}
-              {file && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-green-800">
-                    <span className="font-semibold">✓ Selected:</span> {file.name}
-                  </p>
-                  <p className="text-green-700 text-sm mt-1">
-                    {(file.size / (1024 * 1024)).toFixed(2)} MB
-                  </p>
-                </div>
-              )}
-
-              {/* Prompt Input */}
-              <div>
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-semibold text-slate-700">Output</legend>
+              <label className="flex items-center gap-2 text-sm">
                 <input
-                  type="text"
-                  title="prompt"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Ask something about the video (optional)"
-                  className="w-full p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                  type="checkbox"
+                  checked={wantTranscript}
+                  onChange={(event) => setWantTranscript(event.target.checked)}
+                  className="size-4 rounded"
                 />
-              </div>
+                Transcript with timestamps
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={wantAnalysis}
+                  onChange={(event) => setWantAnalysis(event.target.checked)}
+                  className="size-4 rounded"
+                />
+                Visual analysis
+              </label>
+            </fieldset>
 
-              {/* Status */}
-              {status !== '...' && (
-                <div className={`rounded-lg p-4 border ${statusStyle}`}>
-                  <p className="flex items-center gap-2">
-                    {isProcessing && (
-                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                      </svg>
-                    )}
-                    {status}
-                  </p>
-                </div>
-              )}
-
-              {/* Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleUpload}
-                  disabled={!file || isProcessing}
-                  className="flex-1 px-6 py-3 bg-linear-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                >
-                  {isProcessing ? 'Processing...' : 'Upload and Analyze'}
-                </button>
-                {isProcessing && (
-                  <button
-                    onClick={handleCancel}
-                    className="px-4 py-3 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-all"
-                  >
-                    Cancel
-                  </button>
-                )}
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-700">Translate to</p>
+              <div className="flex flex-wrap gap-2">
+                {LANGUAGES.map((language) => {
+                  const selected = targets.includes(language);
+                  return (
+                    <button
+                      key={language}
+                      type="button"
+                      onClick={() => toggleTarget(language)}
+                      className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                        selected
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-blue-400"
+                      }`}
+                    >
+                      {language}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
 
-          {/* Result Section */}
-          <div className="bg-white rounded-xl shadow-lg p-8 border border-slate-200 flex flex-col">
-            <div className="flex items-center mb-6">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-green-600 font-bold">2</span>
-              </div>
-              <h2 className="text-2xl font-semibold text-slate-900">Results</h2>
-              {result && (
+            {wantAnalysis && (
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Optional: what should the analysis focus on?"
+                className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+              />
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={run}
+                disabled={!file || busy}
+                className="flex-1 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy ? "Working…" : "Run"}
+              </button>
+              {busy && (
                 <button
-                  onClick={() => navigator.clipboard.writeText(result)}
-                  className="ml-auto text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                  onClick={() => abortRef.current?.abort()}
+                  className="rounded-lg bg-slate-200 px-4 py-3 font-semibold text-slate-700 hover:bg-slate-300"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy
+                  Cancel
                 </button>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              {result ? (
-                <div className="prose prose-slate max-w-none">
-                  <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{result}</p>
-                  {isStreaming && (
-                    <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1 rounded-sm" />
+            {status !== "idle" && (
+              <p
+                className={`rounded-lg border p-3 text-sm ${
+                  status === "failed"
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : status === "done"
+                      ? "border-green-200 bg-green-50 text-green-700"
+                      : "border-blue-200 bg-blue-50 text-blue-700"
+                }`}
+              >
+                {status === "failed"
+                  ? error
+                  : status === "done"
+                    ? "Finished"
+                    : status === "cancelled"
+                      ? "Cancelled"
+                      : status === "uploading"
+                        ? "Uploading…"
+                        : stage || "Working…"}
+              </p>
+            )}
+          </section>
+
+          {/* ---------------- Results ---------------- */}
+          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            {!hasOutput ? (
+              <div className="flex h-full min-h-80 items-center justify-center p-10 text-center text-slate-400">
+                Results will appear here.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1 border-b border-slate-200 p-2">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        activeTab === tab.id
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="p-6">
+                  {activeTab === "analysis" && (
+                    <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
+                  )}
+
+                  {activeTab === "transcript" && (
+                    <p className="whitespace-pre-wrap leading-relaxed">{transcript}</p>
+                  )}
+
+                  {current && (
+                    <>
+                      <div className="mb-4 flex justify-end">
+                        <button
+                          onClick={() =>
+                            downloadText(
+                              `${(upload?.filename ?? "subtitles").replace(/\.[^.]+$/, "")}.${current.language.toLowerCase()}.srt`,
+                              current.srt,
+                            )
+                          }
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                        >
+                          Download .srt
+                        </button>
+                      </div>
+                      <p className="whitespace-pre-wrap leading-relaxed">{current.text}</p>
+                    </>
                   )}
                 </div>
-              ) : (
-                <div className="flex items-center justify-center h-64 text-center">
-                  <div>
-                    <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p className="text-slate-500 font-medium">Upload a video to see results</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+              </>
+            )}
+          </section>
         </div>
       </div>
     </div>

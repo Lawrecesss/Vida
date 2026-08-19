@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vida"
+version = "0.1.0"
+description = "Fast video analysis, transcription, and translation SDK"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Lin Htet Shein", email = "lhshein14@gmail.com" }]
+keywords = ["video", "transcription", "translation", "subtitles", "whisper", "asr"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+]
+
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "imageio-ffmpeg>=0.5",
+]
+
+[project.optional-dependencies]
+# ASR backends
+groq = ["groq>=0.11"]
+openai = ["openai>=1.40"]
+local = ["faster-whisper>=1.0"]
+# LLM-backed translation / analysis providers
+agent = ["langgraph>=0.2", "langchain-core>=0.3", "langchain-openrouter>=0.2"]
+# Everything
+all = [
+    "groq>=0.11",
+    "openai>=1.40",
+    "faster-whisper>=1.0",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "langchain-openrouter>=0.2",
+]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[project.scripts]
+vida = "vida.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/lhshein/VidA"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vida"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RET"]
+ignore = [
+    "B008",     # FastAPI's Depends/File defaults are the documented idiom
+    "SIM105",   # contextlib.suppress is not clearer for one-line cleanups
+    "E501",     # line length is enforced by the formatter
+    "ASYNC240", # os.path joins are cheap; this project does not use trio/anyio paths
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]

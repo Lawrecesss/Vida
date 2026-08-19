@@ -1,4 +1,4 @@
-# VidA
+# Vida
 
 A Python SDK for getting text out of video, fast: **analyze** what a video shows,
 **transcribe** what is said in it, and **translate** that into any language —

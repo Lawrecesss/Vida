@@ -10,14 +10,19 @@ import os
 from dataclasses import dataclass, field
 from typing import Literal
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 ASRBackend = Literal["groq", "openai", "local", "auto"]
 
 # Loaded once at import. `.env.secret` is the convention this repo already used;
-# `.env` is the one everyone else expects, so honour both.
+# `.env` is the one everyone else expects, so honour both. A bare relative name
+# resolves against the working directory and stops there, so running from a
+# subdirectory — backend/, or anywhere at all for an installed CLI — silently
+# missed the file; search upward from the CWD instead.
 for _candidate in (".env.secret", ".env"):
-    load_dotenv(_candidate, override=False)
+    _found = find_dotenv(_candidate, usecwd=True)
+    if _found:
+        load_dotenv(_found, override=False)
 
 
 def _env_float(name: str, default: float) -> float:

@@ -52,8 +52,8 @@ Homepage = "https://github.com/Lawrecesss/Vida"
 [tool.hatch.build.targets.wheel]
 packages = ["vida"]
 
-# The repo also carries the demo app (backend/, frontend/) and ~16 MB of sample
-# video in vids/. None of that belongs in a source distribution.
+# The repo also carries the demo app (backend/, frontend/) and an LFS-tracked
+# sample video in vids/. None of that belongs in a source distribution.
 [tool.hatch.build.targets.sdist]
 only-include = ["vida", "tests", "README.md", "LICENSE", ".env.example"]
 

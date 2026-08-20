@@ -6,6 +6,9 @@ to load cuBLAS — which it does lazily, on the first inference rather than at
 model load — so both failure points have to fall back.
 """
 
+import sys
+import types
+
 import pytest
 
 from vida.asr import local_backend
@@ -59,6 +62,12 @@ class _FakeModel:
 
 @pytest.fixture
 def whisper(monkeypatch):
+    """Install a stand-in `faster_whisper` module.
+
+    The backend imports it inside _load, so a fake in sys.modules is enough --
+    and it keeps these tests runnable wherever the suite runs. faster-whisper is
+    the `local` extra, not a dev dependency, so CI does not have the real one.
+    """
     _FakeModel.instances = []
 
     def factory(load_fails_on=()):
@@ -67,7 +76,9 @@ def whisper(monkeypatch):
                 raise CUDA_ERROR
             return _FakeModel(model, device=device, compute_type=compute_type)
 
-        monkeypatch.setattr("faster_whisper.WhisperModel", _construct)
+        module = types.ModuleType("faster_whisper")
+        module.WhisperModel = _construct
+        monkeypatch.setitem(sys.modules, "faster_whisper", module)
         return _FakeModel
 
     return factory

@@ -46,7 +46,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv does not maintain a moving major tag past v7, so pin the
+      # exact release rather than a major that does not resolve.
+      - uses: astral-sh/setup-uv@v10.0.1
 
       - name: Tag must match the version in pyproject.toml
         # Cheap guard against tagging a release without bumping the version,

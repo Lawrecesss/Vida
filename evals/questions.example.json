@@ -1,0 +1,43 @@
+[
+  {
+    "video": "test2.mp4",
+    "questions": [
+      {
+        "id": "t2-setting",
+        "kind": "descriptive",
+        "question": "Where does the video take place?",
+        "expected": "REPLACE ME - e.g. an indoor office with a whiteboard"
+      },
+      {
+        "id": "t2-who",
+        "kind": "descriptive",
+        "question": "How many people appear on screen, and what are they doing?",
+        "expected": "REPLACE ME - e.g. one person, seated, talking to camera"
+      },
+      {
+        "id": "t2-text",
+        "kind": "descriptive",
+        "question": "What visible on-screen text or graphics appear?",
+        "expected": "REPLACE ME - e.g. a slide titled 'Q3 Results'"
+      },
+      {
+        "id": "t2-order",
+        "kind": "temporal",
+        "question": "Which happens first: the speaker sits down, or the slide changes?",
+        "expected": "REPLACE ME - e.g. the speaker sits down first"
+      },
+      {
+        "id": "t2-motion",
+        "kind": "temporal",
+        "question": "In which direction does the camera move during the video?",
+        "expected": "REPLACE ME - e.g. it pans left, then holds still"
+      },
+      {
+        "id": "t2-change",
+        "kind": "temporal",
+        "question": "What changes between the beginning and the end of the video?",
+        "expected": "REPLACE ME - e.g. the room empties out"
+      }
+    ]
+  }
+]

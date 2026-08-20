@@ -18,3 +18,6 @@ dist/
 frames/
 *_segment_*.mp4
 *_chunk*.flac
+
+# Eval output (regenerable; the harness is the artifact, not the results)
+evals/results/

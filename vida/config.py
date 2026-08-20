@@ -76,8 +76,13 @@ class ASRConfig:
 class TranslationConfig:
     """Settings for translating a transcript."""
 
+    # Free-tier slugs get withdrawn without notice: the previous default here
+    # started returning 404 and broke translation on a clean install. Verify a
+    # replacement round-trips the <s id="N"> markers before changing this.
     model: str = field(
-        default_factory=lambda: os.getenv("VIDA_TRANSLATION_MODEL", "arcee-ai/trinity-large-thinking:free")
+        default_factory=lambda: os.getenv(
+            "VIDA_TRANSLATION_MODEL", "nvidia/nemotron-3-super-120b-a12b:free"
+        )
     )
     batch_size: int = field(default_factory=lambda: _env_int("VIDA_TRANSLATION_BATCH_SIZE", 40))
     """Segments per LLM call. Larger batches are cheaper; smaller ones parallelize better."""
@@ -99,7 +104,7 @@ class AnalysisConfig:
     )
     synthesis_model: str = field(
         default_factory=lambda: os.getenv(
-            "VIDA_REASONING_MODEL", "arcee-ai/trinity-large-thinking:free"
+            "VIDA_REASONING_MODEL", "nvidia/nemotron-3-super-120b-a12b:free"
         )
     )
     max_segment_mb: float = field(default_factory=lambda: _env_float("VIDA_MAX_SEGMENT_MB", 20.0))

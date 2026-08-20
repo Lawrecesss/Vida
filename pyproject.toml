@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vida-sdk"
-version = "0.1.0"
-description = "Fast video analysis, transcription, and translation SDK"
+version = "0.1.1"
+description = "Video to subtitles in any language — fast transcription, translation, and visual analysis with timestamps intact"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

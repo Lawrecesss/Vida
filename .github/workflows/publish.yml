@@ -35,9 +35,49 @@ jobs:
       - name: Test
         run: pytest -q
 
+  smoke:
+    name: Live API smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e '.[dev]'
+
+      - name: Secret must be configured
+        # Checked in the shell, not with `if:` — the secrets context is not
+        # available in step-level conditions. Without this the failure would
+        # surface as a ConfigurationError deep inside a test, reading like a
+        # code bug rather than a missing setting.
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::OPENROUTER_API_KEY is not set in repository secrets."
+            echo "Add it under Settings -> Secrets and variables -> Actions, or"
+            echo "remove the smoke job if you do not want a live gate on releases."
+            exit 1
+          fi
+          echo "Secret is present."
+
+      - name: Check the shipped defaults are alive
+        # Every other test stubs the network, so a withdrawn model slug is
+        # invisible to them. This is the gate that would have stopped 0.1.0.
+        # The SDK's own client retries 429/5xx with backoff, so transient
+        # provider blips do not need retry logic here.
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          VIDA_LIVE_SMOKE: "1"
+        run: pytest tests/test_live_smoke.py -q
+
   build:
     name: Build distributions
-    needs: test
+    needs: [test, smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

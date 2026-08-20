@@ -13,6 +13,7 @@ import logging
 
 from vida.asr.base import Transcriber
 from vida.asr.groq_backend import _logprob_to_confidence
+from vida.asr.silence import is_silence
 from vida.errors import MissingDependencyError, TranscriptionError
 from vida.types import Segment, Transcript
 
@@ -208,13 +209,20 @@ class LocalTranscriber(Transcriber):
             text = (item.text or "").strip()
             if not text:
                 continue
+            confidence = _logprob_to_confidence(getattr(item, "avg_logprob", None))
+            if is_silence(
+                getattr(item, "no_speech_prob", None),
+                confidence,
+                self.config.no_speech_threshold,
+            ):
+                continue
             segments.append(
                 Segment(
                     id=index,
                     start=float(item.start),
                     end=float(item.end),
                     text=text,
-                    confidence=_logprob_to_confidence(getattr(item, "avg_logprob", None)),
+                    confidence=confidence,
                 )
             )
 

@@ -53,7 +53,11 @@ export default function Home() {
   const [detectedLanguage, setDetectedLanguage] = useState("");
   const [translations, setTranslations] = useState<Translation[]>([]);
   const [summary, setSummary] = useState("");
-  const [activeTab, setActiveTab] = useState("transcript");
+  // A stage that ran and produced nothing still deserves a tab: without this we
+  // cannot tell "no analysis requested" from "analysed, found nothing to say".
+  const [transcribed, setTranscribed] = useState(false);
+  const [analyzed, setAnalyzed] = useState(false);
+  const [activeTab, setActiveTab] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
   const busy = status === "uploading" || status === "working";
@@ -62,6 +66,8 @@ export default function Home() {
     setTranscript("");
     setTranslations([]);
     setSummary("");
+    setTranscribed(false);
+    setAnalyzed(false);
     setDetectedLanguage("");
     setError("");
     setStage("");
@@ -158,7 +164,8 @@ export default function Home() {
             case "transcript":
               setTranscript(event.text);
               setDetectedLanguage(event.language ?? "");
-              setActiveTab("transcript");
+              setTranscribed(true);
+              if (event.text) setActiveTab("transcript");
               break;
             case "translation":
               setTranslations((current) => [
@@ -168,6 +175,7 @@ export default function Home() {
               break;
             case "analysis":
               setSummary(event.summary);
+              setAnalyzed(true);
               break;
             case "error":
               throw new Error(event.detail);
@@ -188,12 +196,26 @@ export default function Home() {
   }, [file, upload, wantTranscript, wantAnalysis, targets, query]);
 
   const tabs = [
-    ...(transcript ? [{ id: "transcript", label: `Transcript${detectedLanguage ? ` (${detectedLanguage})` : ""}` }] : []),
-    ...translations.map((item) => ({ id: item.language, label: item.language })),
-    ...(summary ? [{ id: "analysis", label: "Analysis" }] : []),
+    ...(transcribed
+      ? [
+          {
+            id: "transcript",
+            label: `Transcript${detectedLanguage ? ` (${detectedLanguage})` : ""}`,
+            empty: !transcript,
+          },
+        ]
+      : []),
+    ...translations.map((item) => ({ id: item.language, label: item.language, empty: !item.text })),
+    ...(analyzed ? [{ id: "analysis", label: "Analysis", empty: !summary }] : []),
   ];
   const hasOutput = tabs.length > 0;
-  const current = translations.find((item) => item.language === activeTab);
+  // What the user picked, if it is still on screen; otherwise the first tab
+  // with something in it. Landing on an empty tab while a filled one sits next
+  // to it is how a silent video came to look like a total failure.
+  const visibleTab =
+    (tabs.find((tab) => tab.id === activeTab) ?? tabs.find((tab) => !tab.empty) ?? tabs[0])?.id ??
+    "";
+  const current = translations.find((item) => item.language === visibleTab);
 
   return (
     <div className="min-h-svh bg-slate-50 text-slate-900">
@@ -346,7 +368,7 @@ export default function Home() {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                        activeTab === tab.id
+                        visibleTab === tab.id
                           ? "bg-slate-900 text-white"
                           : "text-slate-600 hover:bg-slate-100"
                       }`}
@@ -357,13 +379,25 @@ export default function Home() {
                 </div>
 
                 <div className="p-6">
-                  {activeTab === "analysis" && (
-                    <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
-                  )}
+                  {visibleTab === "analysis" &&
+                    (summary ? (
+                      <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
+                    ) : (
+                      <p className="text-slate-500">
+                        The analysis came back empty. That usually means the model had nothing to
+                        add — try again, or ask a specific question to focus it.
+                      </p>
+                    ))}
 
-                  {activeTab === "transcript" && (
-                    <p className="whitespace-pre-wrap leading-relaxed">{transcript}</p>
-                  )}
+                  {visibleTab === "transcript" &&
+                    (transcript ? (
+                      <p className="whitespace-pre-wrap leading-relaxed">{transcript}</p>
+                    ) : (
+                      <p className="text-slate-500">
+                        No speech was detected in this video. Silent clips, music, and background
+                        noise all produce an empty transcript.
+                      </p>
+                    ))}
 
                   {current && (
                     <>

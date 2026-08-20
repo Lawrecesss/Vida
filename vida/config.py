@@ -58,6 +58,11 @@ class ASRConfig:
     groq_api_key: str | None = field(default_factory=lambda: os.getenv("GROQ_API_KEY"))
     openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
 
+    no_speech_threshold: float = field(
+        default_factory=lambda: _env_float("VIDA_NO_SPEECH_THRESHOLD", 0.6)
+    )
+    """Drop segments the model flags as silence above this probability; 1.0 keeps everything."""
+
     local_device: str = field(default_factory=lambda: os.getenv("VIDA_LOCAL_DEVICE", "auto"))
     """``auto`` tries the GPU and falls back to the CPU; ``cuda``/``cpu`` force one."""
 

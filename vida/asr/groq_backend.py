@@ -10,6 +10,7 @@ import asyncio
 import math
 
 from vida.asr.base import Transcriber
+from vida.asr.silence import DEFAULT_NO_SPEECH_THRESHOLD, is_silence
 from vida.config import ASRConfig
 from vida.errors import MissingDependencyError, TranscriptionError
 from vida.types import Segment, Transcript
@@ -80,7 +81,7 @@ class GroqTranscriber(Transcriber):
         except Exception as exc:
             raise TranscriptionError(f"Groq transcription failed: {exc}") from exc
 
-        return _to_transcript(response, audio_path, self.name)
+        return _to_transcript(response, audio_path, self.name, self.config.no_speech_threshold)
 
     async def aclose(self) -> None:
         if self._client is not None:
@@ -100,7 +101,12 @@ def _get(obj, key, default=None):
     return getattr(obj, key, default)
 
 
-def _to_transcript(response, source: str, backend: str) -> Transcript:
+def _to_transcript(
+    response,
+    source: str,
+    backend: str,
+    no_speech_threshold: float = DEFAULT_NO_SPEECH_THRESHOLD,
+) -> Transcript:
     raw_segments = _get(response, "segments") or []
     segments: list[Segment] = []
 
@@ -108,14 +114,17 @@ def _to_transcript(response, source: str, backend: str) -> Transcript:
         text = (_get(item, "text") or "").strip()
         if not text:
             continue
-        avg_logprob = _get(item, "avg_logprob")
+        confidence = _logprob_to_confidence(_get(item, "avg_logprob"))
+        # Hosted Whisper hallucinates over silence exactly as the local one does.
+        if is_silence(_get(item, "no_speech_prob"), confidence, no_speech_threshold):
+            continue
         segments.append(
             Segment(
                 id=index,
                 start=float(_get(item, "start", 0.0) or 0.0),
                 end=float(_get(item, "end", 0.0) or 0.0),
                 text=text,
-                confidence=_logprob_to_confidence(avg_logprob),
+                confidence=confidence,
             )
         )
 

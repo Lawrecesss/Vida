@@ -89,7 +89,7 @@ class OpenAITranscriber(Transcriber):
         except Exception as exc:
             raise TranscriptionError(f"OpenAI transcription failed: {exc}") from exc
 
-        return _to_transcript(response, audio_path, self.name)
+        return _to_transcript(response, audio_path, self.name, self.config.no_speech_threshold)
 
     async def aclose(self) -> None:
         if self._client is not None:

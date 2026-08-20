@@ -21,3 +21,6 @@ frames/
 
 # Eval output (regenerable; the harness is the artifact, not the results)
 evals/results/
+
+# Context pasted into a Claude Project; regenerated from the repo, not a source of truth
+vida-project-context.md

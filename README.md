@@ -34,11 +34,13 @@ parallel. Vida leans on that:
 ## Install
 
 ```bash
-pip install 'vida[groq]'      # fastest hosted transcription
-pip install 'vida[openai]'    # OpenAI Whisper
-pip install 'vida[local]'     # faster-whisper, fully offline
-pip install 'vida[all]'       # everything, including the chat agent
+pip install 'vida-sdk[groq]'      # fastest hosted transcription
+pip install 'vida-sdk[openai]'    # OpenAI Whisper
+pip install 'vida-sdk[local]'     # faster-whisper, fully offline
+pip install 'vida-sdk[all]'       # everything, including the chat agent
 ```
+
+The distribution is `vida-sdk`; the import name is just `vida`.
 
 You also need **ffmpeg**. A system install is used when present; otherwise Vida
 falls back to the binary bundled with `imageio-ffmpeg`, which is a core
@@ -205,7 +207,7 @@ except VidaError as exc:
 
 ## Optional agent layer
 
-For natural-language use, `pip install 'vida[agent]'` adds a LangGraph ReAct
+For natural-language use, `pip install 'vida-sdk[agent]'` adds a LangGraph ReAct
 agent over the same tools. It is not imported by the core SDK, so it costs
 nothing if unused:
 

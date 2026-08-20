@@ -1,6 +1,6 @@
 """An optional natural-language agent over the SDK.
 
-Install with ``pip install 'vida[agent]'``. The core SDK does not import this
+Install with ``pip install 'vida-sdk[agent]'``. The core SDK does not import this
 module, so LangGraph stays out of the fast path.
 """
 

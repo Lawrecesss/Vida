@@ -72,5 +72,5 @@ def get_transcriber(config: ASRConfig | None = None) -> Transcriber:
     raise ConfigurationError(
         "No ASR backend is available.\n"
         + "\n".join(problems)
-        + "\n\nThe quickest fix is: pip install 'vida[groq]' and export GROQ_API_KEY."
+        + "\n\nThe quickest fix is: pip install 'vida-sdk[groq]' and export GROQ_API_KEY."
     )

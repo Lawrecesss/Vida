@@ -24,7 +24,7 @@ class MissingDependencyError(VidaError):
     def __init__(self, package: str, extra: str) -> None:
         super().__init__(
             f"{package!r} is required for this backend. "
-            f"Install it with: pip install 'vida[{extra}]'"
+            f"Install it with: pip install 'vida-sdk[{extra}]'"
         )
         self.package = package
         self.extra = extra

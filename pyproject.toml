@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "vida"
+name = "vida-sdk"
 version = "0.1.0"
 description = "Fast video analysis, transcription, and translation SDK"
 readme = "README.md"
@@ -51,6 +51,11 @@ Homepage = "https://github.com/Lawrecesss/Vida"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vida"]
+
+# The repo also carries the demo app (backend/, frontend/) and ~16 MB of sample
+# video in vids/. None of that belongs in a source distribution.
+[tool.hatch.build.targets.sdist]
+only-include = ["vida", "tests", "README.md", "LICENSE", ".env.example"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

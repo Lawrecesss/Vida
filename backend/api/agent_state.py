@@ -18,7 +18,7 @@ def get_agent():
         except ImportError as exc:
             raise HTTPException(
                 status_code=501,
-                detail="The chat agent is not installed. Run: pip install 'vida[agent]'",
+                detail="The chat agent is not installed. Run: pip install 'vida-sdk[agent]'",
             ) from exc
 
         from vida.errors import ConfigurationError, MissingDependencyError

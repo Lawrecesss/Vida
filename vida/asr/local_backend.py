@@ -36,7 +36,7 @@ class LocalTranscriber(Transcriber):
         except ImportError:
             return (
                 False,
-                "the 'faster-whisper' package is not installed (pip install 'vida[local]')",
+                "the 'faster-whisper' package is not installed (pip install 'vida-sdk[local]')",
             )
         return True, ""
 

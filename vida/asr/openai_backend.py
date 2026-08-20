@@ -34,7 +34,7 @@ class OpenAITranscriber(Transcriber):
         try:
             import openai  # noqa: F401
         except ImportError:
-            return False, "the 'openai' package is not installed (pip install 'vida[openai]')"
+            return False, "the 'openai' package is not installed (pip install 'vida-sdk[openai]')"
         if not self.config.openai_api_key:
             return False, "OPENAI_API_KEY is not set"
         return True, ""

@@ -32,7 +32,7 @@ class GroqTranscriber(Transcriber):
         try:
             import groq  # noqa: F401
         except ImportError:
-            return False, "the 'groq' package is not installed (pip install 'vida[groq]')"
+            return False, "the 'groq' package is not installed (pip install 'vida-sdk[groq]')"
         if not self.config.groq_api_key:
             return False, "GROQ_API_KEY is not set"
         return True, ""

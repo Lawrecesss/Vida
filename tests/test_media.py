@@ -3,14 +3,18 @@
 import os
 
 import pytest
+from _samples import sample_available, sample_path
 
 from vida.errors import MediaError
 from vida.media.audio import extract_audio, split_audio
 from vida.media.frames import extract_frames
 from vida.media.video import probe, segment_video
 
-VIDEO = os.path.join(os.path.dirname(__file__), "..", "vids", "test2.mp4")
-pytestmark = pytest.mark.skipif(not os.path.exists(VIDEO), reason="sample video not present")
+VIDEO = sample_path("test2.mp4")
+pytestmark = pytest.mark.skipif(
+    not sample_available(VIDEO),
+    reason="sample video not fetched (run: git lfs pull)",
+)
 
 
 def test_probe_reads_real_metadata():

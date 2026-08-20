@@ -17,6 +17,10 @@ jobs:
         python: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The ffmpeg tests need the real sample media. Without this the
+          # checkout leaves Git LFS pointer stubs and those tests skip.
+          lfs: true
 
       - uses: actions/setup-python@v7
         with:
@@ -29,8 +33,6 @@ jobs:
         run: ruff check .
 
       - name: Test
-        # Sample media lives in Git LFS and is not fetched here, so the tests
-        # that need it skip. That is by design — they are written to skip.
         run: pytest -q
 
   build:

@@ -8,6 +8,7 @@ import os
 import pathlib
 
 import pytest
+from _samples import sample_available, sample_path
 
 from vida.asr.base import Transcriber
 from vida.client import Vida
@@ -16,8 +17,11 @@ from vida.errors import MediaError
 from vida.media.video import probe
 from vida.types import Segment, Transcript
 
-VIDEO = os.path.join(os.path.dirname(__file__), "..", "vids", "test2.mp4")
-pytestmark = pytest.mark.skipif(not os.path.exists(VIDEO), reason="sample video not present")
+VIDEO = sample_path("test2.mp4")
+pytestmark = pytest.mark.skipif(
+    not sample_available(VIDEO),
+    reason="sample video not fetched (run: git lfs pull)",
+)
 
 
 class StubTranscriber(Transcriber):

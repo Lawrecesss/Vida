@@ -241,6 +241,11 @@ async def process_stream(request: ProcessRequest) -> StreamingResponse:
                     language=transcript.language,
                     segments=len(transcript.segments),
                     text=transcript.text,
+                    # The UI renders every track as timed cues, and the source
+                    # language is a track like any other. Without this it was
+                    # the one output you could not check against the video or
+                    # download as a subtitle file.
+                    srt=transcript.to_srt(),
                 )
 
             for language in request.translate_to:

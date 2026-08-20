@@ -1,26 +1,124 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/*
+ * Vida — "spotting room".
+ *
+ * The palette is borrowed from broadcast captioning rather than picked for
+ * fashion: caption yellow is the colour subtitles have been rendered in since
+ * teletext, and the track colours are the rest of that same palette. True
+ * black is reserved for one thing only — the video frame — so the page ground
+ * is a desaturated blue-grey stage that sits behind it.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-ink: #0c1014;
+  --color-stage: #141920;
+  --color-panel: #1a212b;
+  --color-raised: #202834;
+  --color-edge: #29323f;
+  --color-paper: #e9edf2;
+  --color-muted: #8994a5;
+  --color-caption: #f2c75c;
+  --color-cyan: #6fcbe0;
+  --color-mint: #8ad6a0;
+  --color-orchid: #dc9bd3;
+  --color-alert: #e8705f;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, SFMono-Regular, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-stage);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--color-caption) 30%, transparent);
+  color: var(--color-paper);
+}
+
+/* One focus treatment everywhere, in the accent, always visible. */
+:focus-visible {
+  outline: 2px solid var(--color-caption);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * Subtitles carry a shadow so they stay legible over any frame. The caption
+ * line here is real text over a real black frame, so it gets the real
+ * treatment.
+ */
+.caption-text {
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.9),
+    0 2px 14px rgba(0, 0, 0, 0.85);
+}
+
+/*
+ * Framing marks: the corner ticks of a viewfinder, not a dashed drop-zone box.
+ * Only the corners are drawn, so the frame reads as a camera frame and the
+ * middle stays clear for the caption.
+ */
+.safe-area::before,
+.safe-area::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(in oklab, var(--color-paper) 22%, transparent);
+  pointer-events: none;
+}
+
+.safe-area::before {
+  top: 5%;
+  left: 4%;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.safe-area::after {
+  bottom: 5%;
+  right: 4%;
+  border-left: 0;
+  border-top: 0;
+}
+
+/* Indeterminate progress: a playhead sweeping the width of the frame. */
+@keyframes playhead {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.playhead {
+  animation: playhead 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.cue-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Without the sweep, the bar still has to read as "running". */
+  .playhead {
+    transform: none;
+    width: 100%;
+    opacity: 0.5;
+  }
 }

@@ -1,44 +1,38 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { Letterbox, type UploadInfo } from "./components/letterbox";
+import { TrackPanel, type Track } from "./components/tracks";
+import { downloadText, subtitleFilename } from "./lib/subtitles";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const LANGUAGES = [
-  "Spanish", "French", "German", "Japanese", "Korean",
-  "Chinese", "Burmese", "Thai", "Hindi", "Arabic", "Portuguese",
+  "Spanish",
+  "French",
+  "German",
+  "Japanese",
+  "Korean",
+  "Chinese",
+  "Burmese",
+  "Thai",
+  "Hindi",
+  "Arabic",
+  "Portuguese",
 ];
 
 type Status = "idle" | "uploading" | "working" | "done" | "cancelled" | "failed";
 
-type UploadInfo = {
-  video_path: string;
-  filename: string;
-  size_mb: number;
-  duration: number;
-  has_audio: boolean;
-};
-
 type Translation = { language: string; text: string; srt: string };
 
-function formatDuration(seconds: number): string {
-  const total = Math.round(seconds);
-  const mins = Math.floor(total / 60);
-  const secs = total % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function downloadText(filename: string, body: string) {
-  const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+const NO_SPEECH =
+  "No speech was detected. Silent clips, music, and background noise all produce an empty transcript.";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
+  // The frame shows the real video, so the page keeps an object URL alongside
+  // the file and revokes the previous one whenever the choice changes.
+  const [preview, setPreview] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadInfo | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [stage, setStage] = useState("");
@@ -50,20 +44,23 @@ export default function Home() {
   const [query, setQuery] = useState("");
 
   const [transcript, setTranscript] = useState("");
+  const [transcriptSrt, setTranscriptSrt] = useState("");
   const [detectedLanguage, setDetectedLanguage] = useState("");
   const [translations, setTranslations] = useState<Translation[]>([]);
   const [summary, setSummary] = useState("");
-  // A stage that ran and produced nothing still deserves a tab: without this we
-  // cannot tell "no analysis requested" from "analysed, found nothing to say".
+  // A stage that ran and produced nothing still deserves a track: without this
+  // we cannot tell "no analysis requested" from "analysed, found nothing".
   const [transcribed, setTranscribed] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [activeTab, setActiveTab] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
   const busy = status === "uploading" || status === "working";
+  const nothingSelected = !wantTranscript && !wantAnalysis && targets.length === 0;
 
   const reset = () => {
     setTranscript("");
+    setTranscriptSrt("");
     setTranslations([]);
     setSummary("");
     setTranscribed(false);
@@ -73,9 +70,9 @@ export default function Home() {
     setStage("");
   };
 
-  const handleFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const chosen = event.target.files?.[0];
-    if (!chosen) return;
+  const chooseFile = (chosen: File) => {
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(URL.createObjectURL(chosen));
     setFile(chosen);
     setUpload(null);
     setStatus("idle");
@@ -111,7 +108,7 @@ export default function Home() {
           signal,
         });
         if (!response.ok) {
-          throw new Error((await response.json()).detail ?? "Upload failed");
+          throw new Error((await response.json()).detail ?? "The upload was rejected.");
         }
         media = (await response.json()) as UploadInfo;
         setUpload(media);
@@ -133,7 +130,7 @@ export default function Home() {
         signal,
       });
       if (!response.ok || !response.body) {
-        throw new Error("The server rejected the request");
+        throw new Error("The server rejected the request.");
       }
 
       const reader = response.body.getReader();
@@ -163,9 +160,10 @@ export default function Home() {
               break;
             case "transcript":
               setTranscript(event.text);
+              setTranscriptSrt(event.srt ?? "");
               setDetectedLanguage(event.language ?? "");
               setTranscribed(true);
-              if (event.text) setActiveTab("transcript");
+              if (event.text) setActiveTab("source");
               break;
             case "translation":
               setTranslations((current) => [
@@ -190,239 +188,316 @@ export default function Home() {
         setStatus("cancelled");
         return;
       }
-      setError(caught instanceof Error ? caught.message : String(caught));
+      const reason = caught instanceof Error ? caught.message : String(caught);
+      setError(
+        // fetch() rejects with a bare TypeError when the API is unreachable —
+        // wrong host, backend down, CORS. Name the thing to check.
+        caught instanceof TypeError
+          ? `Could not reach the API at ${API_BASE}. Check that the backend is running and that this origin is allowed.`
+          : reason,
+      );
       setStatus("failed");
     }
   }, [file, upload, wantTranscript, wantAnalysis, targets, query]);
 
-  const tabs = [
+  const tracks: Track[] = [
     ...(transcribed
       ? [
           {
-            id: "transcript",
-            label: `Transcript${detectedLanguage ? ` (${detectedLanguage})` : ""}`,
-            empty: !transcript,
+            id: "source",
+            label: detectedLanguage ? `Source (${detectedLanguage})` : "Source",
+            kind: "subtitle" as const,
+            text: transcript,
+            srt: transcriptSrt,
+            emptyMessage: NO_SPEECH,
           },
         ]
       : []),
-    ...translations.map((item) => ({ id: item.language, label: item.language, empty: !item.text })),
-    ...(analyzed ? [{ id: "analysis", label: "Analysis", empty: !summary }] : []),
+    ...translations.map((item) => ({
+      id: item.language,
+      label: item.language,
+      kind: "subtitle" as const,
+      text: item.text,
+      srt: item.srt,
+      emptyMessage: `Nothing came back for ${item.language}. The source transcript was empty, so there was nothing to translate.`,
+    })),
+    ...(analyzed
+      ? [
+          {
+            id: "analysis",
+            label: "Analysis",
+            kind: "analysis" as const,
+            text: summary,
+            emptyMessage:
+              "The analysis came back empty. Try again, or ask a specific question to focus it.",
+          },
+        ]
+      : []),
   ];
-  const hasOutput = tabs.length > 0;
-  // What the user picked, if it is still on screen; otherwise the first tab
-  // with something in it. Landing on an empty tab while a filled one sits next
-  // to it is how a silent video came to look like a total failure.
-  const visibleTab =
-    (tabs.find((tab) => tab.id === activeTab) ?? tabs.find((tab) => !tab.empty) ?? tabs[0])?.id ??
-    "";
-  const current = translations.find((item) => item.language === visibleTab);
+
+  // What the user picked, if it is still on screen; otherwise the first track
+  // with something in it. Landing on an empty track while a filled one sits
+  // next to it is how a silent video came to look like a total failure.
+  const visibleTrack =
+    tracks.find((track) => track.id === activeTab) ??
+    tracks.find((track) => track.text) ??
+    tracks[0];
+
+  const caption = (() => {
+    if (status === "failed") return "Run failed";
+    if (status === "cancelled") return "Cancelled";
+    if (status === "uploading") return "Uploading";
+    if (status === "working") {
+      if (!stage || stage === "starting") return "Starting";
+      const [verb, language] = stage.split(" → ");
+      const titled = verb.charAt(0).toUpperCase() + verb.slice(1);
+      return language ? `${titled} → ${language}` : titled;
+    }
+    if (status === "done") {
+      return `Done · ${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}`;
+    }
+    return file ? "Ready to generate" : "Drop a video here";
+  })();
+
+  const captionTone =
+    status === "failed" ? "failed" : busy ? "running" : status === "done" ? "done" : "idle";
+
+  const actionLabel =
+    wantAnalysis && !wantTranscript && targets.length === 0 ? "Analyze video" : "Generate subtitles";
 
   return (
-    <div className="min-h-svh bg-slate-50 text-slate-900">
-      <div className="mx-auto max-w-6xl px-6 py-12">
-        <header className="mb-10">
-          <h1 className="text-3xl font-bold tracking-tight">Vida</h1>
-          <p className="mt-1 text-slate-600">
-            Transcribe, translate, and analyze video.
+    <div className="min-h-svh bg-stage">
+      <header className="border-b border-edge">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-6 py-6">
+          <div>
+            <h1 className="font-display text-3xl font-extrabold leading-none tracking-[-0.03em] text-paper">
+              Vida
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              Subtitles in any language, with the timing intact.
+            </p>
+          </div>
+          <p className="font-mono text-[11px] text-muted">
+            <span className="text-muted/60">api</span> {API_BASE.replace(/^https?:\/\//, "")}
           </p>
-        </header>
+        </div>
+      </header>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_1fr]">
-          {/* ---------------- Controls ---------------- */}
-          <section className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div>
-              <input
-                id="video"
-                type="file"
-                accept="video/*,audio/*"
-                onChange={handleFile}
-                className="hidden"
+      <main className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[minmax(0,460px)_1fr] lg:items-start lg:gap-10">
+        <div className="space-y-7 lg:sticky lg:top-8 lg:border-r lg:border-edge lg:pr-10">
+          <Letterbox
+            file={file}
+            upload={upload}
+            preview={preview}
+            caption={caption}
+            tone={captionTone}
+            busy={busy}
+            onFile={chooseFile}
+            onReject={(message) => {
+              setError(message);
+              setStatus("failed");
+            }}
+          />
+
+          <fieldset>
+            <legend className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+              Output
+            </legend>
+            <div className="space-y-2">
+              <Toggle
+                checked={wantTranscript}
+                onChange={setWantTranscript}
+                label="Transcript"
+                hint="Timed cues in the spoken language"
               />
-              <label
-                htmlFor="video"
-                className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 p-8 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40"
-              >
-                <span className="font-medium text-blue-600">Choose a video or audio file</span>
-                <span className="mt-1 text-sm text-slate-500">MP4, MOV, MP3, WAV…</span>
-              </label>
+              <Toggle
+                checked={wantAnalysis}
+                onChange={setWantAnalysis}
+                label="Visual analysis"
+                hint="A description of what the video shows"
+              />
             </div>
+          </fieldset>
 
-            {file && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                <p className="truncate font-medium">{file.name}</p>
-                <p className="mt-0.5 text-slate-500">
-                  {(file.size / 1024 / 1024).toFixed(1)} MB
-                  {upload && ` · ${formatDuration(upload.duration)}`}
-                  {upload && !upload.has_audio && " · no audio track"}
-                </p>
-              </div>
-            )}
+          <fieldset>
+            <legend className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+              Translate into
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {LANGUAGES.map((language) => {
+                const selected = targets.includes(language);
+                return (
+                  <button
+                    key={language}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleTarget(language)}
+                    className={`rounded-sm border px-2.5 py-1 text-[13px] transition-colors ${
+                      selected
+                        ? "border-caption bg-caption/15 text-caption"
+                        : "border-edge text-muted hover:border-muted hover:text-paper"
+                    }`}
+                  >
+                    {language}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
 
-            <fieldset className="space-y-2">
-              <legend className="mb-2 text-sm font-semibold text-slate-700">Output</legend>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={wantTranscript}
-                  onChange={(event) => setWantTranscript(event.target.checked)}
-                  className="size-4 rounded"
-                />
-                Transcript with timestamps
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={wantAnalysis}
-                  onChange={(event) => setWantAnalysis(event.target.checked)}
-                  className="size-4 rounded"
-                />
-                Visual analysis
-              </label>
-            </fieldset>
-
+          {wantAnalysis && (
             <div>
-              <p className="mb-2 text-sm font-semibold text-slate-700">Translate to</p>
-              <div className="flex flex-wrap gap-2">
-                {LANGUAGES.map((language) => {
-                  const selected = targets.includes(language);
-                  return (
-                    <button
-                      key={language}
-                      type="button"
-                      onClick={() => toggleTarget(language)}
-                      className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                        selected
-                          ? "border-blue-600 bg-blue-600 text-white"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-blue-400"
-                      }`}
-                    >
-                      {language}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {wantAnalysis && (
+              <label
+                htmlFor="focus"
+                className="mb-2 block font-mono text-[11px] uppercase tracking-[0.18em] text-muted"
+              >
+                Focus the analysis
+              </label>
               <input
+                id="focus"
                 type="text"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Optional: what should the analysis focus on?"
-                className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                placeholder="What should it look for?"
+                className="w-full rounded-sm border border-edge bg-panel px-3 py-2 text-sm text-paper outline-none placeholder:text-muted/60 focus:border-caption"
               />
-            )}
+            </div>
+          )}
 
-            <div className="flex gap-3">
+          <div className="space-y-3">
+            <div className="flex gap-2">
               <button
                 onClick={run}
-                disabled={!file || busy}
-                className="flex-1 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!file || busy || nothingSelected}
+                className={`flex-1 rounded-sm px-5 py-2.5 text-sm font-semibold transition-colors ${
+                  !file || busy || nothingSelected
+                    ? "cursor-not-allowed border border-edge text-muted/70"
+                    : "bg-caption text-ink hover:bg-caption/90"
+                }`}
               >
-                {busy ? "Working…" : "Run"}
+                {busy ? "Working…" : actionLabel}
               </button>
               {busy && (
                 <button
                   onClick={() => abortRef.current?.abort()}
-                  className="rounded-lg bg-slate-200 px-4 py-3 font-semibold text-slate-700 hover:bg-slate-300"
+                  className="rounded-sm border border-edge px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:border-alert hover:text-alert"
                 >
                   Cancel
                 </button>
               )}
             </div>
 
-            {status !== "idle" && (
-              <p
-                className={`rounded-lg border p-3 text-sm ${
-                  status === "failed"
-                    ? "border-red-200 bg-red-50 text-red-700"
-                    : status === "done"
-                      ? "border-green-200 bg-green-50 text-green-700"
-                      : "border-blue-200 bg-blue-50 text-blue-700"
-                }`}
-              >
-                {status === "failed"
-                  ? error
-                  : status === "done"
-                    ? "Finished"
-                    : status === "cancelled"
-                      ? "Cancelled"
-                      : status === "uploading"
-                        ? "Uploading…"
-                        : stage || "Working…"}
+            {nothingSelected && file && (
+              <p className="text-[13px] text-muted">Pick at least one output to generate.</p>
+            )}
+
+            <p role="status" aria-live="polite" className="sr-only">
+              {caption}
+            </p>
+
+            {status === "failed" && error && (
+              <p className="rounded-sm border border-alert/40 bg-alert/10 px-3 py-2 text-[13px] leading-5 text-alert">
+                {error}
               </p>
             )}
-          </section>
-
-          {/* ---------------- Results ---------------- */}
-          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            {!hasOutput ? (
-              <div className="flex h-full min-h-80 items-center justify-center p-10 text-center text-slate-400">
-                Results will appear here.
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-1 border-b border-slate-200 p-2">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                        visibleTab === tab.id
-                          ? "bg-slate-900 text-white"
-                          : "text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="p-6">
-                  {visibleTab === "analysis" &&
-                    (summary ? (
-                      <p className="whitespace-pre-wrap leading-relaxed">{summary}</p>
-                    ) : (
-                      <p className="text-slate-500">
-                        The analysis came back empty. That usually means the model had nothing to
-                        add — try again, or ask a specific question to focus it.
-                      </p>
-                    ))}
-
-                  {visibleTab === "transcript" &&
-                    (transcript ? (
-                      <p className="whitespace-pre-wrap leading-relaxed">{transcript}</p>
-                    ) : (
-                      <p className="text-slate-500">
-                        No speech was detected in this video. Silent clips, music, and background
-                        noise all produce an empty transcript.
-                      </p>
-                    ))}
-
-                  {current && (
-                    <>
-                      <div className="mb-4 flex justify-end">
-                        <button
-                          onClick={() =>
-                            downloadText(
-                              `${(upload?.filename ?? "subtitles").replace(/\.[^.]+$/, "")}.${current.language.toLowerCase()}.srt`,
-                              current.srt,
-                            )
-                          }
-                          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
-                        >
-                          Download .srt
-                        </button>
-                      </div>
-                      <p className="whitespace-pre-wrap leading-relaxed">{current.text}</p>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
+          </div>
         </div>
-      </div>
+
+        {tracks.length > 0 ? (
+          <TrackPanel
+            tracks={tracks}
+            activeId={visibleTrack?.id ?? ""}
+            onSelect={setActiveTab}
+            onDownload={(track) =>
+              downloadText(
+                subtitleFilename(
+                  upload?.filename,
+                  track.id === "source" ? detectedLanguage || "source" : track.label,
+                ),
+                track.srt ?? "",
+              )
+            }
+          />
+        ) : (
+          <section className="flex min-h-[28rem] flex-col rounded-sm border border-edge bg-panel/40 lg:min-h-[34rem]">
+            <div className="border-b border-edge px-4 py-2">
+              <p className="font-mono text-[11px] text-muted">no cues</p>
+            </div>
+            <ol aria-hidden className="select-none">
+              {[1, 2, 3, 4, 5].map((row) => (
+                <li
+                  key={row}
+                  className="grid grid-cols-[2.5rem_9rem_1fr] items-baseline gap-x-3 border-b border-edge/40 px-4 py-2.5 font-mono text-[11px] text-muted/25"
+                >
+                  <span>{row.toString().padStart(2, "0")}</span>
+                  <span>--:-- → --:--</span>
+                  <span className="h-1.5 rounded-full bg-current" style={{ width: `${70 - row * 9}%` }} />
+                </li>
+              ))}
+            </ol>
+            <p className="max-w-[42ch] px-4 py-6 text-sm leading-6 text-muted">
+              Every language you pick becomes a track here, with timecodes you can check against
+              the video and an .srt to download.
+            </p>
+          </section>
+        )}
+      </main>
+
+      <footer className="mx-auto max-w-6xl px-6 pb-10 pt-2">
+        <p className="font-mono text-[11px] text-muted/70">
+          Powered by{" "}
+          <a
+            href="https://pypi.org/project/vida-sdk/"
+            className="text-muted underline-offset-4 hover:text-caption hover:underline"
+          >
+            vida-sdk
+          </a>
+          . Files are processed on your own server.
+        </p>
+      </footer>
     </div>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2.5 transition-colors ${
+        checked ? "border-caption/50 bg-caption/5" : "border-edge hover:border-muted/60"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="sr-only"
+      />
+      <span
+        aria-hidden
+        className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+          checked ? "border-caption bg-caption" : "border-muted/60"
+        }`}
+      >
+        {checked && (
+          <svg viewBox="0 0 10 8" className="size-2.5 fill-none stroke-ink stroke-2">
+            <path d="M1 4l2.5 2.5L9 1" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+      <span>
+        <span className="block text-sm text-paper">{label}</span>
+        <span className="mt-0.5 block text-[12px] leading-4 text-muted">{hint}</span>
+      </span>
+    </label>
   );
 }

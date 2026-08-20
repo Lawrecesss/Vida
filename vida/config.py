@@ -59,9 +59,12 @@ class ASRConfig:
     openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
 
     local_device: str = field(default_factory=lambda: os.getenv("VIDA_LOCAL_DEVICE", "auto"))
+    """``auto`` tries the GPU and falls back to the CPU; ``cuda``/``cpu`` force one."""
+
     local_compute_type: str = field(
-        default_factory=lambda: os.getenv("VIDA_LOCAL_COMPUTE_TYPE", "int8")
+        default_factory=lambda: os.getenv("VIDA_LOCAL_COMPUTE_TYPE", "auto")
     )
+    """``auto`` picks float16 on a GPU and int8 on a CPU."""
 
     chunk_seconds: float = field(
         default_factory=lambda: _env_float("VIDA_ASR_CHUNK_SECONDS", 600.0)

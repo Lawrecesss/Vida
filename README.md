@@ -42,6 +42,25 @@ pip install 'vida-sdk[all]'       # everything, including the chat agent
 
 The distribution is `vida-sdk`; the import name is just `vida`.
 
+On Debian and Ubuntu, `pip install` into the system Python is blocked by PEP
+668. Use `uv tool install 'vida-sdk[groq]'` (or `pipx`) for the CLI, or install
+into a virtual environment.
+
+### Running the local backend on a GPU
+
+The `local` backend picks the GPU when CUDA works and falls back to the CPU when
+it does not, so nothing is required to get started. To make the GPU path work on
+an NVIDIA card, add the CUDA 12 runtime:
+
+```bash
+pip install 'vida-sdk[local,cuda]'
+```
+
+That pulls ~1.4 GB of NVIDIA wheels, which is why it is a separate extra and not
+part of `local` or `all`. No `LD_LIBRARY_PATH` setup is needed — the libraries
+are loaded from site-packages directly. Force a device with
+`VIDA_LOCAL_DEVICE=cuda|cpu` if you would rather not rely on the probe.
+
 You also need **ffmpeg**. A system install is used when present; otherwise Vida
 falls back to the binary bundled with `imageio-ffmpeg`, which is a core
 dependency — so it works out of the box either way.

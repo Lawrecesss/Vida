@@ -30,6 +30,11 @@ dependencies = [
 groq = ["groq>=0.11"]
 openai = ["openai>=1.40"]
 local = ["faster-whisper>=1.0"]
+# CUDA 12 runtime for the local backend's GPU path, for people who have an
+# NVIDIA card. Deliberately outside `local` and `all`: it is ~1.4 GB of wheels
+# that do nothing on a CPU-only or Apple machine. CTranslate2 4.x wants cuBLAS
+# 12 and cuDNN 9 specifically, hence the upper bound.
+cuda = ["nvidia-cublas-cu12>=12.3", "nvidia-cudnn-cu12>=9.0,<10"]
 # LLM-backed translation / analysis providers
 agent = ["langgraph>=0.2", "langchain-core>=0.3", "langchain-openrouter>=0.2"]
 # Everything

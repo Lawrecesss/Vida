@@ -26,8 +26,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # Pinned to the same exact release as the build job; see the note there.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
       - name: Install
-        run: pip install -e '.[dev]'
+        # --system targets the setup-python interpreter instead of creating a
+        # venv, so ruff and pytest land on PATH for the steps below.
+        run: uv pip install --system -e '.[dev]'
 
       - name: Lint
         run: ruff check .
@@ -46,8 +53,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
       - name: Install
-        run: pip install -e '.[dev]'
+        run: uv pip install --system -e '.[dev]'
 
       - name: Secret must be configured
         # Checked in the shell, not with `if:` — the secrets context is not

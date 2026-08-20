@@ -224,8 +224,8 @@ async with VidaAgent() as agent:
 UI for it.
 
 ```bash
-pip install -r backend/requirements.txt
-cd backend && python run.py            # http://localhost:8000
+uv venv && uv pip install -r backend/requirements.txt
+cd backend && uv run python run.py     # http://localhost:8000
 
 cd frontend && npm install && npm run dev
 ```
@@ -236,8 +236,9 @@ Endpoints: `/upload`, `/transcribe`, `/translate`, `/analyze`, `/process`,
 ## Development
 
 ```bash
-pip install -e '.[dev]'
-pytest
+uv venv
+uv pip install -e '.[dev]'
+uv run pytest
 ```
 
 ## License

@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useRef,
+  useState,
+  ViewTransition,
+} from "react";
 import { Letterbox, type UploadInfo } from "./components/letterbox";
 import { TrackPanel, type Track } from "./components/tracks";
-import { downloadText, subtitleFilename } from "./lib/subtitles";
+import { downloadText, languageTag, subtitleFilename } from "./lib/subtitles";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 const LANGUAGES = [
   "Spanish",
@@ -21,7 +28,8 @@ const LANGUAGES = [
   "Portuguese",
 ];
 
-type Status = "idle" | "uploading" | "working" | "done" | "cancelled" | "failed";
+type Status =
+  "idle" | "uploading" | "working" | "done" | "cancelled" | "failed";
 
 type Translation = { language: string; text: string; srt: string };
 
@@ -56,7 +64,8 @@ export default function Home() {
 
   const abortRef = useRef<AbortController | null>(null);
   const busy = status === "uploading" || status === "working";
-  const nothingSelected = !wantTranscript && !wantAnalysis && targets.length === 0;
+  const nothingSelected =
+    !wantTranscript && !wantAnalysis && targets.length === 0;
 
   const reset = () => {
     setTranscript("");
@@ -108,7 +117,9 @@ export default function Home() {
           signal,
         });
         if (!response.ok) {
-          throw new Error((await response.json()).detail ?? "The upload was rejected.");
+          throw new Error(
+            (await response.json()).detail ?? "The upload was rejected.",
+          );
         }
         media = (await response.json()) as UploadInfo;
         setUpload(media);
@@ -156,24 +167,38 @@ export default function Home() {
           const event = JSON.parse(payload);
           switch (event.event) {
             case "status":
-              setStage(event.language ? `translating → ${event.language}` : event.stage);
+              setStage(
+                event.language
+                  ? `translating → ${event.language}`
+                  : event.stage,
+              );
               break;
             case "transcript":
-              setTranscript(event.text);
-              setTranscriptSrt(event.srt ?? "");
-              setDetectedLanguage(event.language ?? "");
-              setTranscribed(true);
-              if (event.text) setActiveTab("source");
+              startTransition(() => {
+                setTranscript(event.text);
+                setTranscriptSrt(event.srt ?? "");
+                setDetectedLanguage(event.language ?? "");
+                setTranscribed(true);
+                if (event.text) setActiveTab("source");
+              });
               break;
             case "translation":
-              setTranslations((current) => [
-                ...current,
-                { language: event.language, text: event.text, srt: event.srt },
-              ]);
+              startTransition(() => {
+                setTranslations((current) => [
+                  ...current,
+                  {
+                    language: event.language,
+                    text: event.text,
+                    srt: event.srt,
+                  },
+                ]);
+              });
               break;
             case "analysis":
-              setSummary(event.summary);
-              setAnalyzed(true);
+              startTransition(() => {
+                setSummary(event.summary);
+                setAnalyzed(true);
+              });
               break;
             case "error":
               throw new Error(event.detail);
@@ -209,6 +234,7 @@ export default function Home() {
             kind: "subtitle" as const,
             text: transcript,
             srt: transcriptSrt,
+            lang: detectedLanguage || undefined,
             emptyMessage: NO_SPEECH,
           },
         ]
@@ -219,6 +245,7 @@ export default function Home() {
       kind: "subtitle" as const,
       text: item.text,
       srt: item.srt,
+      lang: languageTag(item.language),
       emptyMessage: `Nothing came back for ${item.language}. The source transcript was empty, so there was nothing to translate.`,
     })),
     ...(analyzed
@@ -260,10 +287,18 @@ export default function Home() {
   })();
 
   const captionTone =
-    status === "failed" ? "failed" : busy ? "running" : status === "done" ? "done" : "idle";
+    status === "failed"
+      ? "failed"
+      : busy
+        ? "running"
+        : status === "done"
+          ? "done"
+          : "idle";
 
   const actionLabel =
-    wantAnalysis && !wantTranscript && targets.length === 0 ? "Analyze video" : "Generate subtitles";
+    wantAnalysis && !wantTranscript && targets.length === 0
+      ? "Analyze video"
+      : "Generate subtitles";
 
   return (
     <div className="min-h-svh bg-stage">
@@ -277,14 +312,19 @@ export default function Home() {
               Subtitles in any language, with the timing intact.
             </p>
           </div>
-          <p className="font-mono text-[11px] text-muted">
-            <span className="text-muted/60">api</span> {API_BASE.replace(/^https?:\/\//, "")}
+          <p className="font-mono text-[0.6875rem] text-muted">
+            <span className="text-muted">api</span>{" "}
+            {API_BASE.replace(/^https?:\/\//, "")}
           </p>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[minmax(0,460px)_1fr] lg:items-start lg:gap-10">
-        <div className="space-y-7 lg:sticky lg:top-8 lg:border-r lg:border-edge lg:pr-10">
+      <main
+        id="main"
+        className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[minmax(0,460px)_1fr] lg:items-start lg:gap-10"
+      >
+        <div className="space-y-7 lg:sticky lg:top-8 lg:border-e lg:border-edge lg:pe-10">
+          <h2 className="sr-only">Job setup</h2>
           <Letterbox
             file={file}
             upload={upload}
@@ -300,7 +340,7 @@ export default function Home() {
           />
 
           <fieldset>
-            <legend className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+            <legend className="mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-muted">
               Output
             </legend>
             <div className="space-y-2">
@@ -320,7 +360,7 @@ export default function Home() {
           </fieldset>
 
           <fieldset>
-            <legend className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+            <legend className="mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-muted">
               Translate into
             </legend>
             <div className="flex flex-wrap gap-1.5">
@@ -332,10 +372,10 @@ export default function Home() {
                     type="button"
                     aria-pressed={selected}
                     onClick={() => toggleTarget(language)}
-                    className={`rounded-sm border px-2.5 py-1 text-[13px] transition-colors ${
+                    className={`rounded-sm border px-2.5 py-1.5 text-[0.8125rem] transition-colors ${
                       selected
                         ? "border-caption bg-caption/15 text-caption"
-                        : "border-edge text-muted hover:border-muted hover:text-paper"
+                        : "border-line text-muted hover:border-muted hover:text-paper"
                     }`}
                   >
                     {language}
@@ -349,7 +389,7 @@ export default function Home() {
             <div>
               <label
                 htmlFor="focus"
-                className="mb-2 block font-mono text-[11px] uppercase tracking-[0.18em] text-muted"
+                className="mb-2 block font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-muted"
               >
                 Focus the analysis
               </label>
@@ -359,7 +399,7 @@ export default function Home() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="What should it look for?"
-                className="w-full rounded-sm border border-edge bg-panel px-3 py-2 text-sm text-paper outline-none placeholder:text-muted/60 focus:border-caption"
+                className="w-full rounded-sm border border-line bg-panel px-3 py-2 text-sm text-paper outline-none placeholder:text-muted focus:border-caption"
               />
             </div>
           )}
@@ -371,7 +411,7 @@ export default function Home() {
                 disabled={!file || busy || nothingSelected}
                 className={`flex-1 rounded-sm px-5 py-2.5 text-sm font-semibold transition-colors ${
                   !file || busy || nothingSelected
-                    ? "cursor-not-allowed border border-edge text-muted/70"
+                    ? "cursor-not-allowed border border-line text-muted"
                     : "bg-caption text-ink hover:bg-caption/90"
                 }`}
               >
@@ -380,7 +420,7 @@ export default function Home() {
               {busy && (
                 <button
                   onClick={() => abortRef.current?.abort()}
-                  className="rounded-sm border border-edge px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:border-alert hover:text-alert"
+                  className="rounded-sm border border-line px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:border-alert hover:text-alert"
                 >
                   Cancel
                 </button>
@@ -388,7 +428,9 @@ export default function Home() {
             </div>
 
             {nothingSelected && file && (
-              <p className="text-[13px] text-muted">Pick at least one output to generate.</p>
+              <p className="text-[0.8125rem] text-muted">
+                Pick at least one output to generate.
+              </p>
             )}
 
             <p role="status" aria-live="polite" className="sr-only">
@@ -396,7 +438,10 @@ export default function Home() {
             </p>
 
             {status === "failed" && error && (
-              <p className="rounded-sm border border-alert/40 bg-alert/10 px-3 py-2 text-[13px] leading-5 text-alert">
+              <p
+                role="alert"
+                className="wrap-anywhere rounded-sm border border-alert/40 bg-alert/10 px-3 py-2 text-[0.8125rem] leading-5 text-alert"
+              >
                 {error}
               </p>
             )}
@@ -404,47 +449,56 @@ export default function Home() {
         </div>
 
         {tracks.length > 0 ? (
-          <TrackPanel
-            tracks={tracks}
-            activeId={visibleTrack?.id ?? ""}
-            onSelect={setActiveTab}
-            onDownload={(track) =>
-              downloadText(
-                subtitleFilename(
-                  upload?.filename,
-                  track.id === "source" ? detectedLanguage || "source" : track.label,
-                ),
-                track.srt ?? "",
-              )
-            }
-          />
+          <ViewTransition key="tracks" default="none" enter="slide-up">
+            <TrackPanel
+              tracks={tracks}
+              activeId={visibleTrack?.id ?? ""}
+              onSelect={(id) => startTransition(() => setActiveTab(id))}
+              onDownload={(track) =>
+                downloadText(
+                  subtitleFilename(
+                    upload?.filename,
+                    track.id === "source"
+                      ? detectedLanguage || "source"
+                      : track.label,
+                  ),
+                  track.srt ?? "",
+                )
+              }
+            />
+          </ViewTransition>
         ) : (
-          <section className="flex min-h-[28rem] flex-col rounded-sm border border-edge bg-panel/40 lg:min-h-[34rem]">
-            <div className="border-b border-edge px-4 py-2">
-              <p className="font-mono text-[11px] text-muted">no cues</p>
-            </div>
-            <ol aria-hidden className="select-none">
-              {[1, 2, 3, 4, 5].map((row) => (
-                <li
-                  key={row}
-                  className="grid grid-cols-[2.5rem_9rem_1fr] items-baseline gap-x-3 border-b border-edge/40 px-4 py-2.5 font-mono text-[11px] text-muted/25"
-                >
-                  <span>{row.toString().padStart(2, "0")}</span>
-                  <span>--:-- → --:--</span>
-                  <span className="h-1.5 rounded-full bg-current" style={{ width: `${70 - row * 9}%` }} />
-                </li>
-              ))}
-            </ol>
-            <p className="max-w-[42ch] px-4 py-6 text-sm leading-6 text-muted">
-              Every language you pick becomes a track here, with timecodes you can check against
-              the video and an .srt to download.
-            </p>
-          </section>
+          <ViewTransition key="skeleton" default="none" exit="slide-down">
+            <section className="flex min-h-[28rem] flex-col rounded-sm border border-edge bg-panel/40 lg:min-h-[34rem]">
+              <div className="border-b border-edge px-4 py-2">
+                <p className="font-mono text-[0.6875rem] text-muted">no cues</p>
+              </div>
+              <ol aria-hidden className="select-none">
+                {[1, 2, 3, 4, 5].map((row) => (
+                  <li
+                    key={row}
+                    className="grid grid-cols-[2.5rem_9rem_1fr] items-baseline gap-x-3 border-b border-edge/40 px-4 py-2.5 font-mono text-[0.6875rem] text-muted/25"
+                  >
+                    <span>{row.toString().padStart(2, "0")}</span>
+                    <span>--:-- → --:--</span>
+                    <span
+                      className="h-1.5 rounded-full bg-current"
+                      style={{ width: `${70 - row * 9}%` }}
+                    />
+                  </li>
+                ))}
+              </ol>
+              <p className="max-w-[42ch] px-4 py-6 text-sm leading-6 text-muted">
+                Every language you pick becomes a track here, with timecodes you
+                can check against the video and an .srt to download.
+              </p>
+            </section>
+          </ViewTransition>
         )}
       </main>
 
       <footer className="mx-auto max-w-6xl px-6 pb-10 pt-2">
-        <p className="font-mono text-[11px] text-muted/70">
+        <p className="wrap-anywhere font-mono text-[0.6875rem] text-muted">
           Powered by{" "}
           <a
             href="https://pypi.org/project/vida-sdk/"
@@ -473,7 +527,9 @@ function Toggle({
   return (
     <label
       className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2.5 transition-colors ${
-        checked ? "border-caption/50 bg-caption/5" : "border-edge hover:border-muted/60"
+        checked
+          ? "border-caption/50 bg-caption/5"
+          : "border-edge hover:border-muted/60"
       }`}
     >
       <input
@@ -489,14 +545,23 @@ function Toggle({
         }`}
       >
         {checked && (
-          <svg viewBox="0 0 10 8" className="size-2.5 fill-none stroke-ink stroke-2">
-            <path d="M1 4l2.5 2.5L9 1" strokeLinecap="round" strokeLinejoin="round" />
+          <svg
+            viewBox="0 0 10 8"
+            className="size-2.5 fill-none stroke-ink stroke-2"
+          >
+            <path
+              d="M1 4l2.5 2.5L9 1"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         )}
       </span>
       <span>
         <span className="block text-sm text-paper">{label}</span>
-        <span className="mt-0.5 block text-[12px] leading-4 text-muted">{hint}</span>
+        <span className="mt-0.5 block text-[0.75rem] leading-4 text-muted">
+          {hint}
+        </span>
       </span>
     </label>
   );

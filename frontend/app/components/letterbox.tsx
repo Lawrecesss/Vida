@@ -67,7 +67,7 @@ export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, 
           setDragging(false);
           accept(event.dataTransfer.files?.[0]);
         }}
-        className={`safe-area relative flex aspect-video w-full cursor-pointer flex-col justify-end overflow-hidden rounded-sm bg-ink transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-caption ${
+        className={`control safe-area relative flex aspect-video w-full cursor-pointer flex-col justify-end overflow-hidden rounded-sm bg-ink transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-caption ${
           dragging ? "ring-2 ring-caption" : "ring-1 ring-edge"
         }`}
       >
@@ -93,7 +93,7 @@ export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, 
         {/* Frame furniture: a corner marker, the way a slate or viewfinder has. */}
         <span
           aria-hidden
-          className="absolute right-3 top-3 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35"
+          className="absolute end-3 top-3 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-paper/60"
         >
           {file ? "source" : "no source"}
         </span>
@@ -105,7 +105,7 @@ export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, 
         </p>
 
         {!file && (
-          <span className="relative z-10 px-12 pb-4 text-center font-mono text-[11px] tracking-wide text-paper/40">
+          <span className="relative z-10 px-12 pb-4 text-center font-mono text-[0.6875rem] tracking-wide text-paper/60">
             drag it in, or click to browse · mp4 mov mkv mp3 wav
           </span>
         )}
@@ -120,10 +120,10 @@ export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, 
       </label>
 
       {/* The slate: what the file is, in the font data belongs in. */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.6875rem] text-muted">
         {file ? (
           <>
-            <span className="max-w-[22ch] truncate text-paper" title={file.name}>
+            <span className="max-w-[22ch] truncate text-paper" title={file.name} dir="auto">
               {file.name}
             </span>
             <span aria-hidden>·</span>

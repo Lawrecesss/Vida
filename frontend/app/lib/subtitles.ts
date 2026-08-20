@@ -78,3 +78,26 @@ export function subtitleFilename(source: string | undefined, language: string): 
   const stem = (source ?? "subtitles").replace(/\.[^.]+$/, "");
   return `${stem}.${language.toLowerCase().replace(/\s+/g, "-")}.srt`;
 }
+
+/**
+ * BCP-47 tags for the languages the UI offers, so translated tracks carry a
+ * `lang` attribute. Screen readers switch voice on it, and without it Arabic
+ * gets read with an English pronunciation engine.
+ */
+const LANGUAGE_TAGS: Record<string, string> = {
+  Spanish: "es",
+  French: "fr",
+  German: "de",
+  Japanese: "ja",
+  Korean: "ko",
+  Chinese: "zh",
+  Burmese: "my",
+  Thai: "th",
+  Hindi: "hi",
+  Arabic: "ar",
+  Portuguese: "pt",
+};
+
+export function languageTag(name: string): string | undefined {
+  return LANGUAGE_TAGS[name];
+}

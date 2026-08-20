@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -29,6 +29,13 @@ export const metadata: Metadata = {
     "Upload a video and get subtitle tracks with the timing intact, plus a description of what the video shows.",
 };
 
+// The interface is dark-only, so tell the browser: native scrollbars, form
+// controls, and the address bar all follow.
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: "#141920",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -39,7 +46,16 @@ export default function RootLayout({
       lang="en"
       className={`${display.variable} ${body.variable} ${code.variable} h-full`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {/* Keyboard users land here first and can jump past the header. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-sm focus:bg-caption focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink"
+        >
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

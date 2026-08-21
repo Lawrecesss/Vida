@@ -13,7 +13,7 @@ import os
 
 from vida.media.ffmpeg import arun, ffmpeg_path
 
-__all__ = ["extract_audio", "split_audio", "AudioChunk"]
+__all__ = ["extract_audio", "split_audio", "cut_audio", "AudioChunk"]
 
 SAMPLE_RATE = 16_000
 """Whisper-family models resample to 16 kHz internally; doing it here saves bandwidth."""
@@ -44,33 +44,52 @@ async def extract_audio(
     *,
     sample_rate: int = SAMPLE_RATE,
     timeout: float = 900.0,
+    audio_filter: str | None = None,
 ) -> str:
     """Strip the audio track out of ``video_path`` into mono FLAC at ``out_path``.
 
     FLAC is lossless (so it costs the ASR model nothing in accuracy) and is
-    accepted by every backend we support.
+    accepted by every backend we support. ``audio_filter`` is an ffmpeg filter
+    chain applied on the way out — this is the one place the audio is decoded
+    anyway, so cleaning it here is free.
     """
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or ".", exist_ok=True)
-    await arun(
-        [
-            ffmpeg_path(), "-y",
-            "-i", video_path,
-            "-vn",                      # drop video
-            "-map", "0:a:0",            # first audio track only
-            "-ac", "1",                 # mono
-            "-ar", str(sample_rate),
-            "-c:a", "flac",
-            "-loglevel", "error",
-            out_path,
-        ],
-        timeout=timeout,
-    )
+    command = [
+        ffmpeg_path(), "-y",
+        "-i", video_path,
+        "-vn",                      # drop video
+        "-map", "0:a:0",            # first audio track only
+    ]
+    if audio_filter:
+        # Downmix and resample *inside* the graph, before the filter runs.
+        # `-ac`/`-ar` below are output options, so without this the chain would
+        # see whatever the camera recorded — 48 kHz stereo, say — and a noise
+        # reduction tuned against 16 kHz mono behaves quite differently there.
+        command += [
+            "-af",
+            f"aformat=channel_layouts=mono,aresample={sample_rate},{audio_filter}",
+        ]
+    command += [
+        "-ac", "1",                 # mono
+        "-ar", str(sample_rate),
+        "-c:a", "flac",
+        "-loglevel", "error",
+        out_path,
+    ]
+    await arun(command, timeout=timeout)
     return out_path
 
 
-async def _cut(
-    src: str, dest: str, start: float, duration: float, sample_rate: int, timeout: float
-) -> None:
+async def cut_audio(
+    src: str,
+    dest: str,
+    start: float,
+    duration: float,
+    *,
+    sample_rate: int = SAMPLE_RATE,
+    timeout: float = 600.0,
+) -> str:
+    """Copy ``duration`` seconds of ``src`` starting at ``start`` into ``dest``."""
     await arun(
         [
             ffmpeg_path(), "-y",
@@ -85,6 +104,7 @@ async def _cut(
         ],
         timeout=timeout,
     )
+    return dest
 
 
 async def split_audio(
@@ -126,7 +146,14 @@ async def split_audio(
 
     await asyncio.gather(
         *(
-            _cut(audio_path, dest, chunk_start, chunk_end - chunk_start, sample_rate, timeout)
+            cut_audio(
+                audio_path,
+                dest,
+                chunk_start,
+                chunk_end - chunk_start,
+                sample_rate=sample_rate,
+                timeout=timeout,
+            )
             for dest, chunk_start, chunk_end, _ in planned
         )
     )

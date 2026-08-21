@@ -239,6 +239,10 @@ async def process_stream(request: ProcessRequest) -> StreamingResponse:
                 yield emit(
                     "transcript",
                     language=transcript.language,
+                    # Every language actually heard, not just the majority one.
+                    # A bilingual recording used to report a single language
+                    # and give the UI no way to say otherwise.
+                    languages=transcript.languages,
                     segments=len(transcript.segments),
                     text=transcript.text,
                     # The UI renders every track as timed cues, and the source

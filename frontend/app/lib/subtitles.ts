@@ -101,3 +101,53 @@ const LANGUAGE_TAGS: Record<string, string> = {
 export function languageTag(name: string): string | undefined {
   return LANGUAGE_TAGS[name];
 }
+
+/** `00:01:23,456` → `83.456`. Returns NaN for anything unparseable. */
+export function timecodeToSeconds(timecode: string): number {
+  const match = timecode.match(/^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/);
+  if (!match) return NaN;
+  const [, h, m, s, ms] = match;
+  return +h * 3600 + +m * 60 + +s + +ms / 1000;
+}
+
+/** `83.456` → `00:01:23,456`, clamped at zero so a nudge cannot go negative. */
+export function secondsToTimecode(seconds: number): string {
+  const total = Math.max(0, seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  const ms = Math.round((total - Math.floor(total)) * 1000);
+  const p = (n: number, width = 2) => n.toString().padStart(width, "0");
+  return `${p(h)}:${p(m)}:${p(s)},${p(ms, 3)}`;
+}
+
+/**
+ * Cues back to an SRT body.
+ *
+ * The server owns subtitle formatting everywhere else, but once the user edits
+ * a cue there is no round trip to ask — the file they download has to be built
+ * from what is on screen. Indices are renumbered from 1 so a deleted cue does
+ * not leave a hole that some players choke on.
+ */
+export function buildSrt(cues: Cue[]): string {
+  return (
+    cues
+      .map((cue, i) => `${i + 1}\n${cue.start} --> ${cue.end}\n${cue.text}`)
+      .join("\n\n") + "\n"
+  );
+}
+
+/** Characters per second — the reading-speed number subtitlers actually check. */
+export function charsPerSecond(cue: Cue): number {
+  const span = timecodeToSeconds(cue.end) - timecodeToSeconds(cue.start);
+  if (!(span > 0)) return 0;
+  // Line breaks are not read, so they do not count against the budget.
+  return cue.text.replace(/\s+/g, " ").length / span;
+}
+
+/**
+ * 17 chars/sec is the usual adult reading-speed ceiling for subtitles (it is
+ * what Netflix's English timed-text spec allows). Past it, a cue is on screen
+ * too briefly to finish reading.
+ */
+export const CPS_LIMIT = 17;

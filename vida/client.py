@@ -135,6 +135,9 @@ class Vida:
                 prompt=prompt,
                 work_dir=work_dir,
                 source=source,
+                # Detect from the untouched media: the cleanup that helps the
+                # decode pushes the language detector further off.
+                probe_source=media.path,
             )
 
     @overload
@@ -388,14 +391,21 @@ class Vida:
 
     async def _audio_for(self, media: MediaInfo, work_dir: str) -> str:
         """Path to transcribable audio for ``media``, extracting it if needed."""
+        audio_filter = self.config.asr.audio_filter
         extension = os.path.splitext(media.path)[1].lower()
         if extension in _AUDIO_EXTENSIONS:
-            return media.path
-        if not media.has_audio:
+            # Audio input normally skips the transcode entirely. A filter chain
+            # is a reason to pay for one: noisy audio is noisy whichever
+            # container it arrived in.
+            if not audio_filter:
+                return media.path
+        elif not media.has_audio:
             raise MediaError(
                 f"{media.path} has no audio track, so there is nothing to transcribe."
             )
-        return await extract_audio_for(media.path, work_dir, media.has_audio)
+        return await extract_audio_for(
+            media.path, work_dir, media.has_audio, audio_filter=audio_filter
+        )
 
     @contextlib.contextmanager
     def _work_dir(self):

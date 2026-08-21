@@ -52,5 +52,7 @@ def test_available_backends_reports_a_reason_for_each():
 def test_model_falls_back_to_the_backend_default():
     from vida.asr import GroqTranscriber
 
-    assert GroqTranscriber(ASRConfig()).model == "whisper-large-v3-turbo"
-    assert GroqTranscriber(ASRConfig(model="whisper-large-v3")).model == "whisper-large-v3"
+    assert GroqTranscriber(ASRConfig()).model == "whisper-large-v3"
+    assert GroqTranscriber(ASRConfig(model="whisper-large-v3-turbo")).model == (
+        "whisper-large-v3-turbo"
+    )

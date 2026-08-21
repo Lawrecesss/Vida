@@ -1,6 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import {
+  AudioLinesIcon,
+  ClockIcon,
+  FilmIcon,
+  HardDriveIcon,
+  UploadCloudIcon,
+  VolumeXIcon,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { formatDuration } from "../lib/subtitles";
 
 export type UploadInfo = {
@@ -28,26 +39,39 @@ type Props = {
  *
  * It is the drop target, the progress indicator, and the status line all in one
  * place — but each of those gets its own slot rather than sharing one. The
- * caption line, in the lower third and in caption yellow, says what the run is
+ * caption line, in the lower third and in the amber, says what the run is
  * doing; the slate strip underneath says what the file is.
+ *
+ * The frame itself stays hand-built — no component library ships a viewfinder —
+ * but everything around it is shadcn, so the badges and tooltips here match the
+ * rest of the page exactly.
  */
-export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, onReject }: Props) {
+export function Letterbox({
+  file,
+  upload,
+  preview,
+  caption,
+  tone,
+  busy,
+  onFile,
+  onReject,
+}: Props) {
   const [dragging, setDragging] = useState(false);
 
   const accept = (candidate: File | undefined) => {
     if (!candidate) return;
-    if (!candidate.type.startsWith("video/") && !candidate.type.startsWith("audio/")) {
+    if (
+      !candidate.type.startsWith("video/") &&
+      !candidate.type.startsWith("audio/")
+    ) {
       onReject(`${candidate.name} is not a video or audio file.`);
       return;
     }
     onFile(candidate);
   };
 
-  const captionTone =
-    tone === "failed" ? "text-alert" : tone === "idle" && !file ? "text-paper/70" : "text-caption";
-
   return (
-    <div>
+    <div className="flex flex-col gap-2">
       <input
         id="source-file"
         type="file"
@@ -67,9 +91,13 @@ export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, 
           setDragging(false);
           accept(event.dataTransfer.files?.[0]);
         }}
-        className={`control safe-area relative flex aspect-video w-full cursor-pointer flex-col justify-end overflow-hidden rounded-sm bg-ink transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-caption ${
-          dragging ? "ring-2 ring-caption" : "ring-1 ring-edge"
-        }`}
+        className={cn(
+          "control safe-area relative flex aspect-video w-full cursor-pointer flex-col justify-end overflow-hidden rounded-lg bg-ink transition-all",
+          "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring",
+          dragging
+            ? "ring-2 ring-primary scale-[1.01]"
+            : "ring-1 ring-border hover:ring-input",
+        )}
       >
         {preview && (
           <>
@@ -91,56 +119,112 @@ export function Letterbox({ file, upload, preview, caption, tone, busy, onFile, 
         )}
 
         {/* Frame furniture: a corner marker, the way a slate or viewfinder has. */}
-        <span
+        <Badge
+          variant="outline"
           aria-hidden
-          className="absolute end-3 top-3 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-paper/60"
+          className="absolute end-3 top-3 border-paper/25 bg-ink/40 font-mono text-[0.625rem] tracking-[0.18em] text-paper/70 uppercase backdrop-blur-sm"
         >
+          {file ? <FilmIcon data-icon="inline-start" /> : null}
           {file ? "source" : "no source"}
-        </span>
+        </Badge>
 
         <p
-          className={`caption-text relative z-10 px-6 pb-[9%] text-center text-lg leading-snug font-medium sm:text-xl ${captionTone}`}
+          className={cn(
+            "caption-text relative z-10 px-6 pb-[9%] text-center text-lg leading-snug font-medium sm:text-xl",
+            tone === "failed"
+              ? "text-destructive"
+              : tone === "idle" && !file
+                ? "text-paper/70"
+                : "text-caption",
+          )}
         >
           {caption}
         </p>
 
         {!file && (
-          <span className="relative z-10 px-12 pb-4 text-center font-mono text-[0.6875rem] tracking-wide text-paper/60">
-            drag it in, or click to browse · mp4 mov mkv mp3 wav
+          // Two lines on purpose: the instruction reads as a sentence, the
+          // formats as a spec. One line wraps and drops the icon mid-phrase.
+          <span className="relative z-10 flex flex-col items-center gap-1 px-6 pb-4 text-center font-mono tracking-wide">
+            <span className="flex items-center gap-1.5 text-[0.6875rem] text-paper/65">
+              <UploadCloudIcon className="size-3.5" aria-hidden />
+              drag it in, or click to browse
+            </span>
+            <span className="text-[0.625rem] text-paper/40">
+              mp4 · mov · mkv · mp3 · wav
+            </span>
           </span>
         )}
 
         {/* Progress lives on the frame edge, like a playhead on a scrubber. */}
         <span
           aria-hidden
-          className={`absolute inset-x-0 bottom-0 h-px overflow-hidden bg-edge ${busy ? "" : "opacity-0"}`}
+          className={cn(
+            "absolute inset-x-0 bottom-0 h-px overflow-hidden bg-border",
+            busy ? "" : "opacity-0",
+          )}
         >
-          <span className="playhead block h-full w-1/4 bg-caption" />
+          <span className="playhead block h-full w-1/4 bg-primary" />
         </span>
       </label>
 
       {/* The slate: what the file is, in the font data belongs in. */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.6875rem] text-muted">
+      <div className="flex flex-wrap items-center gap-1.5">
         {file ? (
           <>
-            <span className="max-w-[22ch] truncate text-paper" title={file.name} dir="auto">
-              {file.name}
-            </span>
-            <span aria-hidden>·</span>
-            <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="max-w-[22ch] font-mono text-[0.6875rem]"
+                >
+                  <span className="truncate" dir="auto">
+                    {file.name}
+                  </span>
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{file.name}</TooltipContent>
+            </Tooltip>
+
+            <Badge
+              variant="ghost"
+              className="font-mono text-[0.6875rem] text-muted-foreground"
+            >
+              <HardDriveIcon data-icon="inline-start" aria-hidden />
+              {(file.size / 1024 / 1024).toFixed(1)} MB
+            </Badge>
+
             {upload && (
               <>
-                <span aria-hidden>·</span>
-                <span>{formatDuration(upload.duration)}</span>
-                <span aria-hidden>·</span>
-                <span className={upload.has_audio ? "" : "text-alert"}>
+                <Badge
+                  variant="ghost"
+                  className="font-mono text-[0.6875rem] text-muted-foreground"
+                >
+                  <ClockIcon data-icon="inline-start" aria-hidden />
+                  {formatDuration(upload.duration)}
+                </Badge>
+                {/* A missing audio track is the single best predictor of an
+                    empty transcript, so it is the one chip that shouts. */}
+                <Badge
+                  variant={upload.has_audio ? "ghost" : "destructive"}
+                  className="font-mono text-[0.6875rem]"
+                >
+                  {upload.has_audio ? (
+                    <AudioLinesIcon data-icon="inline-start" aria-hidden />
+                  ) : (
+                    <VolumeXIcon data-icon="inline-start" aria-hidden />
+                  )}
                   {upload.has_audio ? "audio track" : "no audio track"}
-                </span>
+                </Badge>
               </>
             )}
           </>
         ) : (
-          <span>awaiting a file</span>
+          <Badge
+            variant="ghost"
+            className="font-mono text-[0.6875rem] text-muted-foreground"
+          >
+            awaiting a file
+          </Badge>
         )}
       </div>
     </div>

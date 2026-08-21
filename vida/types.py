@@ -44,6 +44,14 @@ class Segment(BaseModel):
     text: str
     speaker: str | None = None
     confidence: float | None = None
+    language: str | None = Field(
+        default=None,
+        description=(
+            "Language this span was decoded as. Whisper decides one language "
+            "per request, so in a bilingual recording this varies between "
+            "segments while Transcript.language names only the majority."
+        ),
+    )
 
     @property
     def duration(self) -> float:
@@ -65,6 +73,23 @@ class Transcript(BaseModel):
     def text(self) -> str:
         """The whole transcript as one block of text."""
         return " ".join(s.text.strip() for s in self.segments if s.text.strip())
+
+    @property
+    def languages(self) -> list[str]:
+        """Every language present, in the order it is first heard.
+
+        ``language`` is the majority one and is what names a file; this is what
+        tells you the recording was bilingual at all.
+        """
+        seen: list[str] = []
+        for segment in self.segments:
+            if segment.language and segment.language not in seen:
+                seen.append(segment.language)
+        return seen
+
+    @property
+    def is_multilingual(self) -> bool:
+        return len(self.languages) > 1
 
     def to_srt(self) -> str:
         """Render as SubRip (.srt)."""

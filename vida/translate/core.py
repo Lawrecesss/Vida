@@ -43,6 +43,30 @@ Segments:
 {segments}"""
 
 
+def _source_note(segments: list[Segment], fallback: str | None) -> str:
+    """Describe what the batch is actually in.
+
+    Telling the model "the source language is English" when half the batch is
+    Burmese is worse than saying nothing: it invites the model to treat the
+    Burmese as garbled English and "fix" it. Per-segment languages let a mixed
+    batch be named honestly instead.
+    """
+    present = []
+    for segment in segments:
+        if segment.language and segment.language not in present:
+            present.append(segment.language)
+
+    if len(present) == 1:
+        return f"The source language is {present[0]}. "
+    if len(present) > 1:
+        joined = ", ".join(present)
+        return (
+            f"The source segments are a mix of these languages: {joined}. "
+            "Translate each one from whichever language it is actually in. "
+        )
+    return f"The source language is {fallback}. " if fallback else ""
+
+
 def _render(segments: list[Segment]) -> str:
     return "\n".join(f'<s id="{s.id}">{s.text.strip()}</s>' for s in segments)
 
@@ -63,9 +87,7 @@ async def _translate_batch(
     source_language: str | None,
 ) -> dict[int, str]:
     """Translate one batch, degrading to per-segment calls if alignment breaks."""
-    source_note = (
-        f"The source language is {source_language}. " if source_language else ""
-    )
+    source_note = _source_note(batch, source_language)
     prompt = source_note + _INSTRUCTIONS.format(
         target=target_language, segments=_render(batch)
     )
@@ -164,6 +186,10 @@ async def translate_transcript(
                 client, batch, target_language, config, transcript.language
             )
 
+    # Keeping a bilingual recording's segments in source order means a batch is
+    # usually all one language, and the few batches that straddle the switch
+    # are told so explicitly rather than being mislabelled.
+
     try:
         results = await asyncio.gather(*(_run(batch) for batch in batches))
     except Exception as exc:
@@ -183,6 +209,10 @@ async def translate_transcript(
                 text=translations.get(segment.id, segment.text),
                 speaker=segment.speaker,
                 confidence=segment.confidence,
+                # Every segment is in the target language now; carrying the
+                # source language forward would make the output claim to be
+                # something it is not.
+                language=target_language,
             )
             for segment in transcript.segments
         ],

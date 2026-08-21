@@ -1,37 +1,129 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /*
- * Vida — "spotting room".
+ * Vida — "prism on black".
  *
- * The palette is borrowed from broadcast captioning rather than picked for
- * fashion: caption yellow is the colour subtitles have been rendered in since
- * teletext, and the track colours are the rest of that same palette. True
- * black is reserved for one thing only — the video frame — so the page ground
- * is a desaturated blue-grey stage that sits behind it.
+ * Sampled from Apple's iPad Pro tile on apple.com/sg: 96% of that image is
+ * pure black, and the only colour is a chromatic-dispersion ribbon. Measured
+ * hue peaks in the source, by pixel count:
+ *
+ *   #ffd200  48°   #ffad00  36°   #ff6a00  24°   — the warm band
+ *   #04afad 168°   #00e4ff 180°   #00b0ff 192°   — the cool band
+ *   #0094ff 204°   #0064fd 216°   #0000fc 240°   — the blue band
+ *
+ * Note the gap: the source has essentially no true green (72°–156° is empty).
+ * What reads as green there is the 168° teal, so that is what --color-teal is.
+ *
+ * The accents below are those hues lightened until they clear 4.5:1 on the
+ * panel — the raw values are near-black in luminance and would fail as text.
+ *
+ * shadcn/ui supplies the components; this file is what stops them looking like
+ * every other shadcn app. Every semantic token below is pointed at a Vida
+ * colour, so `bg-primary` is the amber and `bg-card` is the panel — the
+ * components inherit the identity instead of overriding it.
  */
 @theme inline {
-  --color-ink: #0c1014;
-  --color-stage: #141920;
-  --color-panel: #1a212b;
-  --color-raised: #202834;
-  --color-edge: #29323f;
+  /* Vida's own names, still used where the meaning is literal: the video
+     frame is ink, a translated track is cyan. The greys are near-neutral now
+     rather than blue-grey, so the colour on the page is only ever an accent. */
+  --color-ink: #000000;
+  --color-stage: #0b0c0e;
+  --color-panel: #141518;
+  --color-raised: #1c1e23;
+  --color-edge: #282b31;
   /* Control boundaries need 3:1 against their surface (WCAG 1.4.11); --edge is
-     1.25:1 and is for decorative separators only. Measured: 3.17 on panel. */
-  --color-line: #616f84;
-  --color-paper: #e9edf2;
-  --color-muted: #8994a5;
-  --color-caption: #f2c75c;
-  --color-cyan: #6fcbe0;
-  --color-mint: #8ad6a0;
-  --color-orchid: #dc9bd3;
-  --color-alert: #e8705f;
+     1.29:1 and is for decorative separators only. Measured: 3.40 on panel,
+     3.22 through the glass panel. */
+  --color-line: #666b73;
+  --color-paper: #f2f3f5;
+  /* The ribbon, one colour per band. --caption keeps its name: it is still the
+     colour a subtitle is rendered in, now amber instead of teletext yellow. */
+  --color-caption: #ffb020;
+  --color-teal: #2fd4bd;
+  --color-cyan: #3ecfef;
+  --color-blue: #4d9bff;
+  --color-magenta: #ff5c8a;
+  --color-alert: #ff5c47;
+
+  /* shadcn semantics, pointed at the palette above. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, SFMono-Regular, monospace;
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
+/*
+ * One theme, not two. The interface is dark-only — a grading suite is not lit
+ * like an office — so the values live on :root and `.dark` on <html> exists
+ * only to switch on the `dark:` variants baked into the shadcn components.
+ */
+:root,
+.dark {
+  --background: #0b0c0e;
+  --foreground: #f2f3f5;
+  --card: #141518;
+  --card-foreground: #f2f3f5;
+  --popover: #1c1e23;
+  --popover-foreground: #f2f3f5;
+  /* The amber is the primary action colour; true black sits on it (measured
+     11.5:1), which is why buttons read as black-on-amber. */
+  --primary: #ffb020;
+  --primary-foreground: #000000;
+  --secondary: #1c1e23;
+  --secondary-foreground: #f2f3f5;
+  --muted: #1c1e23;
+  --muted-foreground: #9096a1;
+  --accent: #212429;
+  --accent-foreground: #f2f3f5;
+  --destructive: #ff5c47;
+  --destructive-foreground: #000000;
+  --border: #282b31;
+  --input: #666b73;
+  --ring: #ffb020;
+  --chart-1: #ffb020;
+  --chart-2: #2fd4bd;
+  --chart-3: #4d9bff;
+  --chart-4: #ff5c8a;
+  --chart-5: #3ecfef;
+  /* Broadcast furniture is square-ish; nothing here is a pill except badges. */
+  --radius: 0.5rem;
+
   --duration-exit: 150ms;
   --duration-enter: 210ms;
   --duration-move: 400ms;
@@ -88,23 +180,62 @@
   }
 }
 
-body {
-  background-color: var(--color-stage);
-  color: var(--color-paper);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-::selection {
-  background-color: color-mix(in oklab, var(--color-caption) 30%, transparent);
-  color: var(--color-paper);
-}
+  /*
+   * Always reserve the scrollbar gutter.
+   *
+   * Without this, anything that grows the page past the viewport — switching
+   * on Visual analysis and revealing the focus field, or the first track
+   * arriving — makes a scrollbar appear, which narrows the scrollport and
+   * shifts the whole layout sideways. Toggling a switch should not move the
+   * page under the cursor.
+   */
+  html {
+    scrollbar-gutter: stable;
+  }
 
-/* One focus treatment everywhere, in the accent, always visible. */
-:focus-visible {
-  outline: 2px solid var(--color-caption);
-  outline-offset: 2px;
-  border-radius: 2px;
+  /* Safari only shipped scrollbar-gutter in 18.2. Older engines get the blunt
+     version: always render the track, so its width is never a surprise. */
+  @supports not (scrollbar-gutter: stable) {
+    html {
+      overflow-y: scroll;
+    }
+  }
+
+  /*
+   * ...and never let a popover pay for it twice.
+   *
+   * Radix locks body scroll behind every Select and Dialog, and the
+   * react-remove-scroll under it compensates for the scrollbar it thinks it
+   * just removed by adding `margin-right: <scrollbar>px !important` to <body>.
+   * The gutter above is reserved whether or not the page scrolls, so nothing
+   * was removed — the margin is pure surplus, and the layout jumps sideways
+   * the moment a dropdown opens. Give the compensation back.
+   */
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-caption) 30%, transparent);
+    color: var(--color-paper);
+  }
+
+  /* One focus treatment everywhere, in the accent, always visible. */
+  :focus-visible {
+    outline: 2px solid var(--color-caption);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
 }
 
 /*
@@ -165,11 +296,6 @@ body {
   overflow-wrap: break-word;
 }
 
-.cue-list {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-edge) transparent;
-}
-
 /* Touch pointers get comfortable targets without loosening desktop density. */
 @media (pointer: coarse) {
   button,
@@ -181,10 +307,13 @@ body {
 
 /* Honour an explicit contrast preference by strengthening lines and dimmed text. */
 @media (prefers-contrast: more) {
-  :root {
-    --color-muted: #b3bcc9;
-    --color-edge: #61708a;
-    --color-line: #8b9ab0;
+  :root,
+  .dark {
+    --muted-foreground: #bcc1c9;
+    --border: #5a5f68;
+    --input: #8d939c;
+    --color-edge: #5a5f68;
+    --color-line: #8d939c;
   }
 }
 
@@ -202,5 +331,136 @@ body {
     transform: none;
     width: 100%;
     opacity: 0.5;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Backdrop layers (see app/components/backdrop.tsx).
+ *
+ * Everything here is behind the content and pointer-events:none. The numbers
+ * are deliberately timid — this is the room the tool sits in, not the tool.
+ * ------------------------------------------------------------------------- */
+
+.aurora {
+  /* A soft-edged bloom. `blur` on a huge element is expensive to repaint, so
+     the falloff is baked into the gradient instead and nothing here animates
+     anything but `transform`. */
+  filter: blur(40px);
+  will-change: transform;
+  animation: drift 38s ease-in-out infinite alternate;
+}
+
+.aurora-caption {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in oklab, var(--color-caption) 19%, transparent) 0%,
+    color-mix(in oklab, var(--color-caption) 6%, transparent) 42%,
+    transparent 68%
+  );
+}
+
+.aurora-cyan {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in oklab, var(--color-cyan) 17%, transparent) 0%,
+    color-mix(in oklab, var(--color-cyan) 5%, transparent) 42%,
+    transparent 68%
+  );
+  animation-duration: 46s;
+  animation-delay: -12s;
+}
+
+.aurora-blue {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in oklab, var(--color-blue) 20%, transparent) 0%,
+    color-mix(in oklab, var(--color-blue) 6%, transparent) 42%,
+    transparent 68%
+  );
+  animation-duration: 54s;
+  animation-delay: -26s;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6vmax, 4vmax, 0) scale(1.18);
+  }
+}
+
+/* Broadcast furniture: a 3px line cycle, just past the threshold of noticing. */
+.scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.22) 0px,
+    rgba(0, 0, 0, 0.22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.35;
+}
+
+/* Static grain. feTurbulence renders once into a tile and then costs nothing. */
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+}
+
+.vignette {
+  background: radial-gradient(
+    ellipse 90% 70% at 50% 40%,
+    transparent 0%,
+    color-mix(in oklab, var(--color-ink) 32%, transparent) 100%
+  );
+}
+
+/* Motion is the first thing to go: the blooms stay, the drift stops. */
+@media (prefers-reduced-motion: reduce) {
+  .aurora {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Glass surfaces.
+ *
+ * Three things together make a pane read as glass rather than as a grey box:
+ * it lets the backdrop's colour through, it *saturates* what it blurs (real
+ * glass concentrates colour), and it catches a specular highlight along its
+ * top edge. The inset hairline is the one people leave out, and it is the one
+ * doing most of the work.
+ * ------------------------------------------------------------------------- */
+.glass {
+  background-color: color-mix(in oklab, var(--color-panel) 58%, transparent);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 16px 40px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* Smaller controls: same idea, less of everything, or they turn milky. */
+.glass-control {
+  background-color: color-mix(in oklab, var(--color-raised) 45%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/*
+ * backdrop-filter is the expensive property here, and it composites against
+ * whatever is behind it every frame the aurora moves. If the machine says it
+ * cannot keep up, drop the blur and pay for the colour with opacity instead.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-control {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: var(--color-panel);
   }
 }

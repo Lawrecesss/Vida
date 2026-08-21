@@ -174,7 +174,7 @@ vida backends
 
 | Backend  | Speed | Cost | Notes |
 |----------|-------|------|-------|
-| `groq`   | fastest | cheap | `whisper-large-v3-turbo`; needs `GROQ_API_KEY` |
+| `groq`   | fastest | cheap | `whisper-large-v3`; needs `GROQ_API_KEY` |
 | `openai` | fast | moderate | `whisper-1`; 25 MB per request, handled by chunking |
 | `local`  | slowest on CPU | free | `faster-whisper`; fully offline, downloads weights on first run |
 
@@ -184,6 +184,44 @@ present. Force one explicitly:
 ```python
 vida = Vida(asr_backend="local", asr_model="medium")
 ```
+
+### Getting the words right
+
+Two things decide how much of a noisy recording you actually get back.
+
+**Clean the audio first.** Whisper does not merely mistranscribe through wind
+and traffic — it goes quiet, returning nothing at all for stretches where
+someone is clearly talking. Vida runs an ffmpeg denoise chain during the one
+decode it has to do anyway. On a wind-heavy action-camera clip that was worth
+25% more segments and a third more words:
+
+| | segments | speech covered | words |
+|---|---|---|---|
+| `VIDA_ASR_AUDIO_FILTER=""` | 26 | 70s | 122 |
+| default chain | 32–38 | 92–113s | 152–168 |
+
+It also restores the confidence scores the silence filter depends on, which
+noise otherwise pushes into the range where real speech and hallucinations are
+indistinguishable. Set `VIDA_ASR_AUDIO_FILTER=""` for clean studio audio, where
+the filtering only costs CPU.
+
+**Pin the language.** Whisper decides on a language for every 30-second window,
+and on accented speech it changes its mind mid-file: half a recording comes
+back in English and the rest in a language that merely sounds like it, invented
+word for word. Vida detects once from the opening `VIDA_ASR_DETECT_SECONDS` and
+pins that answer for every window.
+
+That detection is a guess, and on hard audio it is the weakest link in the
+pipeline — the same recording has been called English, Malay, and Burmese
+depending on which 30 seconds the detector was shown. **Pass `language=`
+whenever you know it.** That path is exact:
+
+```python
+transcript = await vida.transcribe("talk.mp4", language="en")
+```
+
+A genuinely multilingual recording is the one case that wants the opposite —
+set `VIDA_ASR_DETECT_SECONDS=0` to let each window decide for itself.
 
 ## Configuration
 
@@ -200,6 +238,9 @@ vida = Vida(config)
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `VIDA_ASR_MODEL` | backend default | Override the ASR model without touching code |
+| `VIDA_ASR_AUDIO_FILTER` | denoise chain | ffmpeg filter applied during extraction; empty disables |
+| `VIDA_ASR_DETECT_SECONDS` | `30` | Audio sampled to pin the language up front; `0` disables |
 | `VIDA_ASR_CHUNK_SECONDS` | `600` | Audio longer than this is split |
 | `VIDA_ASR_CONCURRENCY` | `8` | Chunks transcribed at once |
 | `VIDA_TRANSLATION_BATCH_SIZE` | `40` | Segments per translation call |

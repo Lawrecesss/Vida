@@ -13,7 +13,7 @@ import logging
 
 from vida.asr.base import Transcriber
 from vida.asr.groq_backend import _logprob_to_confidence
-from vida.asr.silence import is_silence
+from vida.asr.silence import is_repetition_loop, is_silence
 from vida.errors import MissingDependencyError, TranscriptionError
 from vida.types import Segment, Transcript
 
@@ -215,6 +215,8 @@ class LocalTranscriber(Transcriber):
                 confidence,
                 self.config.no_speech_threshold,
             ):
+                continue
+            if is_repetition_loop(text):
                 continue
             segments.append(
                 Segment(

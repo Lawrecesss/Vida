@@ -1,6 +1,26 @@
 "use client";
 
-import { useRef, ViewTransition } from "react";
+import { ViewTransition } from "react";
+import {
+  CaptionsOffIcon,
+  DownloadIcon,
+  EyeIcon,
+  SearchXIcon,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { parseSrt, shortTimecode } from "../lib/subtitles";
 
 export type Track = {
@@ -15,20 +35,21 @@ export type Track = {
   emptyMessage: string;
 };
 
+// Four bands of the prism, spread as far apart in hue as the source allows
+// (36° / 168° / 210° / 340°) so two tracks are never confusable at a glance.
 const TONES = [
   "text-caption",
-  "text-cyan",
-  "text-mint",
-  "text-orchid",
+  "text-teal",
+  "text-blue",
+  "text-magenta",
 ] as const;
 
-/** Caption-palette colour per subtitle track; the analysis stays neutral. */
+/** Prism-palette colour per subtitle track; the analysis stays neutral. */
 export function toneFor(track: Track, index: number): string {
-  return track.kind === "analysis" ? "text-paper" : TONES[index % TONES.length];
+  return track.kind === "analysis"
+    ? "text-foreground"
+    : TONES[index % TONES.length];
 }
-
-const tabId = (id: string) => `track-tab-${id}`;
-const panelId = (id: string) => `track-panel-${id}`;
 
 type Props = {
   tracks: Track[];
@@ -37,183 +58,211 @@ type Props = {
   onDownload: (track: Track) => void;
 };
 
+/**
+ * Output tracks, one tab each.
+ *
+ * The tablist is Radix's via shadcn `Tabs`, which is the whole reason this file
+ * no longer hand-rolls arrow-key handling, roving tabindex, and the
+ * aria-controls wiring — all of that is now the primitive's problem.
+ */
 export function TrackPanel({ tracks, activeId, onSelect, onDownload }: Props) {
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
-  const activeIndex = Math.max(
-    0,
-    tracks.findIndex((track) => track.id === activeId),
-  );
-  const active = tracks[activeIndex];
-  const cues = active?.srt ? parseSrt(active.srt) : [];
-
-  // Arrow keys move between tabs, Home/End jump to the ends. Without this a
-  // tablist is a worse keyboard experience than plain buttons would have been.
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    const last = tracks.length - 1;
-    const next =
-      event.key === "ArrowRight"
-        ? (activeIndex + 1) % tracks.length
-        : event.key === "ArrowLeft"
-          ? (activeIndex + last) % tracks.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? last
-              : null;
-    if (next === null) return;
-
-    event.preventDefault();
-    const target = tracks[next];
-    onSelect(target.id);
-    tabRefs.current[target.id]?.focus();
-  };
-
   return (
-    <section
+    <Card
       aria-labelledby="tracks-heading"
-      className="flex min-h-[28rem] flex-col overflow-hidden rounded-sm border border-edge bg-panel lg:min-h-[34rem]"
+      // Glass, not a slab: the backdrop's light bleeds through so the
+      // panel sits *in* the room rather than on top of it. The blur
+      // flattens whatever is behind, so cue text keeps full contrast.
+      className="glass flex min-h-[28rem] flex-col gap-0 overflow-hidden p-0 lg:min-h-[34rem]"
     >
       <h2 id="tracks-heading" className="sr-only">
         Output tracks
       </h2>
 
-      <div
-        role="tablist"
-        aria-label="Output tracks"
-        onKeyDown={onKeyDown}
-        className="flex flex-wrap items-center gap-1 border-b border-edge px-2 py-2"
+      <Tabs
+        value={activeId}
+        onValueChange={onSelect}
+        className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        {tracks.map((track, index) => {
-          const selected = track.id === active?.id;
-          return (
-            <button
-              key={track.id}
-              id={tabId(track.id)}
-              ref={(node) => {
-                tabRefs.current[track.id] = node;
-              }}
-              role="tab"
-              aria-selected={selected}
-              aria-controls={panelId(track.id)}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => onSelect(track.id)}
-              className={`flex items-center gap-2 rounded-sm px-3 py-1.5 text-[0.875rem] transition-colors ${
-                selected
-                  ? "bg-raised text-paper"
-                  : "text-muted hover:bg-raised/60 hover:text-paper"
-              }`}
-            >
-              <span
-                aria-hidden
-                className={`size-1.5 rounded-full bg-current ${toneFor(track, index)} ${
-                  selected ? "" : "opacity-50"
-                }`}
-              />
-              {track.label}
-            </button>
-          );
-        })}
-      </div>
+        <TabsList
+          variant="line"
+          aria-label="Output tracks"
+          // The height override needs the same variant prefix the component
+          // uses (`group-data-horizontal/tabs:h-8`) or it loses to it, and a
+          // wrapped second row of tabs spills into the cue list below.
+          // Eight tracks is an ordinary run here, so it wraps often.
+          className="h-auto w-full flex-wrap justify-start gap-x-1 gap-y-1.5 border-b px-2 py-2 group-data-horizontal/tabs:h-auto"
+        >
+          {tracks.map((track, index) => {
+            const selected = track.id === activeId;
+            return (
+              <TabsTrigger
+                key={track.id}
+                value={track.id}
+                className={cn(
+                  "flex-none data-active:after:bg-current",
+                  selected && toneFor(track, index),
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "size-1.5 rounded-full bg-current",
+                    toneFor(track, index),
+                    selected ? "" : "opacity-50",
+                  )}
+                />
+                {track.label}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
-      {!active ? null : (
+        {/* One transition for the whole panel, keyed on which track is
+            showing — not one per TabsContent. Per-content transitions fire
+            when a *hidden* panel mounts mid-run, and the browser paints that
+            snapshot over the panel: a new translation arriving made the
+            visible track flash to the new one and back. */}
         <ViewTransition
-          key={active.id}
+          key={activeId}
           default="none"
           enter="fade-in"
           exit="fade-out"
         >
-          <div
-            id={panelId(active.id)}
-            role="tabpanel"
-            aria-labelledby={tabId(active.id)}
-            // Focusable so a keyboard user can scroll a long cue list.
-            tabIndex={0}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            {active.kind === "analysis" ? (
-              <div className="flex-1 overflow-y-auto px-6 py-6">
-                <p className="mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-muted">
-                  What the video shows
-                </p>
-                {active.text ? (
-                  <p className="wrap-anywhere max-w-[68ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-paper/90">
-                    {active.text}
-                  </p>
-                ) : (
-                  <p className="max-w-[52ch] text-[0.875rem] leading-6 text-muted">
-                    {active.emptyMessage}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between border-b border-edge px-4 py-2">
-                  <p className="font-mono text-[0.6875rem] text-muted">
-                    {cues.length > 0 ? `${cues.length} cues` : "no cues"}
-                  </p>
-                  {active.srt && cues.length > 0 && (
-                    <button
-                      onClick={() => onDownload(active)}
-                      className="rounded-sm border border-line px-3 py-1 font-mono text-[0.6875rem] text-paper transition-colors hover:border-caption hover:text-caption"
-                    >
-                      Download .srt
-                    </button>
-                  )}
-                </div>
-
-                <div className="cue-list flex-1 overflow-y-auto">
-                  {cues.length > 0 ? (
-                    <ol>
-                      {cues.map((cue) => (
-                        <li
-                          key={cue.index}
-                          className="grid grid-cols-[2.5rem_1fr] items-baseline gap-x-3 border-b border-edge/60 px-4 py-2.5 transition-colors hover:bg-raised/40 sm:grid-cols-[2.5rem_9rem_1fr]"
-                        >
-                          <span className="font-mono text-[0.6875rem] tabular-nums text-muted">
-                            {cue.index.toString().padStart(2, "0")}
-                          </span>
-                          <span
-                            className={`font-mono text-[0.6875rem] tabular-nums ${toneFor(active, activeIndex)}`}
-                          >
-                            {shortTimecode(cue.start)}
-                            <span className="px-1 text-muted" aria-hidden>
-                              →
-                            </span>
-                            {shortTimecode(cue.end)}
-                          </span>
-                          {/* dir="auto" so Arabic and other RTL translations read
-                            correctly; lang so they are pronounced correctly. */}
-                          <span
-                            lang={active.lang}
-                            dir="auto"
-                            className="wrap-anywhere col-span-2 text-[0.9375rem] leading-6 text-paper/90 sm:col-span-1"
-                          >
-                            {cue.text}
-                          </span>
-                        </li>
-                      ))}
-                    </ol>
-                  ) : active.text ? (
-                    // A track with text but no parseable timings still has to render.
-                    <p
-                      lang={active.lang}
-                      dir="auto"
-                      className="wrap-anywhere whitespace-pre-wrap px-4 py-4 text-[0.9375rem] leading-7 text-paper/90"
-                    >
-                      {active.text}
-                    </p>
-                  ) : (
-                    <p className="max-w-[52ch] px-4 py-6 text-[0.875rem] leading-6 text-muted">
-                      {active.emptyMessage}
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {tracks.map((track, index) => (
+              <TabsContent
+                key={track.id}
+                value={track.id}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <TrackBody
+                  track={track}
+                  tone={toneFor(track, index)}
+                  onDownload={() => onDownload(track)}
+                />
+              </TabsContent>
+            ))}
           </div>
         </ViewTransition>
-      )}
-    </section>
+      </Tabs>
+    </Card>
+  );
+}
+
+/**
+ * Kept separate so the SRT is only parsed for the track actually on screen —
+ * Radix unmounts the inactive panels, so this never runs for them.
+ */
+function TrackBody({
+  track,
+  tone,
+  onDownload,
+}: {
+  track: Track;
+  tone: string;
+  onDownload: () => void;
+}) {
+  if (track.kind === "analysis") {
+    return (
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-6 py-6">
+          <p className="mb-3 flex items-center gap-2 font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase">
+            <EyeIcon className="size-3.5" aria-hidden />
+            What the video shows
+          </p>
+          {track.text ? (
+            <p className="wrap-anywhere max-w-[68ch] text-[0.9375rem] leading-7 whitespace-pre-wrap text-foreground/90">
+              {track.text}
+            </p>
+          ) : (
+            <Empty className="border-0">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <SearchXIcon />
+                </EmptyMedia>
+                <EmptyTitle>Nothing to describe</EmptyTitle>
+                <EmptyDescription>{track.emptyMessage}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </div>
+      </ScrollArea>
+    );
+  }
+
+  const cues = track.srt ? parseSrt(track.srt) : [];
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 px-4 py-2">
+        <Badge variant="ghost" className="font-mono text-[0.6875rem]">
+          {cues.length > 0 ? `${cues.length} cues` : "no cues"}
+        </Badge>
+        {track.srt && cues.length > 0 && (
+          <Button variant="outline" size="sm" onClick={onDownload}>
+            <DownloadIcon data-icon="inline-start" aria-hidden />
+            Download .srt
+          </Button>
+        )}
+      </div>
+      <Separator />
+
+      <ScrollArea className="min-h-0 flex-1">
+        {cues.length > 0 ? (
+          <ol>
+            {cues.map((cue) => (
+              <li
+                key={cue.index}
+                className="grid grid-cols-[2.5rem_1fr] items-baseline gap-x-3 border-b px-4 py-2.5 transition-colors last:border-b-0 hover:bg-muted/40 sm:grid-cols-[2.5rem_9rem_1fr]"
+              >
+                <span className="font-mono text-[0.6875rem] tabular-nums text-muted-foreground">
+                  {cue.index.toString().padStart(2, "0")}
+                </span>
+                <span
+                  className={cn(
+                    "font-mono text-[0.6875rem] tabular-nums",
+                    tone,
+                  )}
+                >
+                  {shortTimecode(cue.start)}
+                  <span className="px-1 text-muted-foreground" aria-hidden>
+                    →
+                  </span>
+                  {shortTimecode(cue.end)}
+                </span>
+                {/* dir="auto" so Arabic and other RTL translations read
+                    correctly; lang so they are pronounced correctly. */}
+                <span
+                  lang={track.lang}
+                  dir="auto"
+                  className="wrap-anywhere col-span-2 text-[0.9375rem] leading-6 text-foreground/90 sm:col-span-1"
+                >
+                  {cue.text}
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : track.text ? (
+          // A track with text but no parseable timings still has to render.
+          <p
+            lang={track.lang}
+            dir="auto"
+            className="wrap-anywhere px-4 py-4 text-[0.9375rem] leading-7 whitespace-pre-wrap text-foreground/90"
+          >
+            {track.text}
+          </p>
+        ) : (
+          <Empty className="border-0 py-10">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CaptionsOffIcon />
+              </EmptyMedia>
+              <EmptyTitle>No cues on this track</EmptyTitle>
+              <EmptyDescription>{track.emptyMessage}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
+      </ScrollArea>
+    </>
   );
 }

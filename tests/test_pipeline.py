@@ -107,13 +107,26 @@ async def test_transcript_exports_to_subtitles(tmp_path):
     assert body.count("-->") == len(transcript.segments)
 
 
-async def test_audio_input_skips_extraction(tmp_path):
+async def test_audio_input_skips_extraction_when_nothing_would_be_done_to_it(tmp_path):
     from vida.media.audio import extract_audio
 
     audio = await extract_audio(VIDEO, str(tmp_path / "a.flac"))
-    vida, stub = _client(chunk_seconds=600)
+    vida, stub = _client(chunk_seconds=600, audio_filter="")
     await vida.transcribe(audio)
     assert stub.seen == [audio]  # used the file directly, no re-extraction
+
+
+async def test_audio_input_is_still_cleaned_when_a_filter_is_configured(tmp_path):
+    # Skipping the transcode is an optimisation, not a promise: noisy audio is
+    # noisy whichever container it arrived in, and the filter is why Whisper
+    # hears the quiet parts at all.
+    from vida.media.audio import extract_audio
+
+    audio = await extract_audio(VIDEO, str(tmp_path / "a.flac"))
+    vida, stub = _client(chunk_seconds=600, audio_filter="highpass=f=100")
+    await vida.transcribe(audio)
+    assert stub.seen != [audio]
+    assert stub.seen[0].endswith(".flac")
 
 
 async def test_missing_file_is_reported():
@@ -131,3 +144,97 @@ def test_sync_wrapper_refuses_inside_a_running_loop():
             vida.transcribe_sync(VIDEO)
 
     asyncio.run(inner())
+
+
+class LanguageStub(StubTranscriber):
+    """Records the language hint each call was given, and what it detects."""
+
+    def __init__(self, config, detected="Malay", fail=False):
+        super().__init__(config)
+        self.detected = detected
+        self.fail = fail
+        self.hints: list[str | None] = []
+
+    async def transcribe_file(self, audio_path, *, language=None, prompt=None):
+        if self.fail and not self.hints:
+            from vida.errors import TranscriptionError
+
+            self.hints.append(language)
+            raise TranscriptionError("detection blew up")
+        self.hints.append(language)
+        transcript = await super().transcribe_file(audio_path, language=language, prompt=prompt)
+        transcript.language = self.detected
+        return transcript
+
+
+def _language_client(detected="Malay", fail=False, **asr_kwargs):
+    config = VidaConfig(asr=ASRConfig(**asr_kwargs))
+    vida = Vida(config)
+    stub = LanguageStub(config.asr, detected=detected, fail=fail)
+    vida._transcriber = stub
+    return vida, stub
+
+
+async def test_detected_language_is_pinned_for_every_chunk():
+    # Whisper re-detects per 30s window and drifts; one detection up front,
+    # applied to every chunk, is what stops half a file coming back in a
+    # language nobody spoke.
+    vida, stub = _language_client(detected="English", detect_seconds=5, chunk_seconds=10)
+    await vida.transcribe(VIDEO)
+
+    detection, *chunks = stub.hints
+    assert detection is None                     # the probe itself auto-detects
+    assert chunks and all(hint == "en" for hint in chunks)
+
+
+async def test_a_caller_supplied_language_skips_detection():
+    vida, stub = _language_client(detect_seconds=5, chunk_seconds=600)
+    await vida.transcribe(VIDEO, language="fr")
+    assert stub.hints == ["fr"]                  # no probe, no second opinion
+
+
+async def test_audio_shorter_than_one_window_is_not_probed():
+    # A file that fits in a single detection window has nothing to drift
+    # between, so probing it would only ask the same question twice.
+    vida, stub = _language_client(detect_seconds=600, chunk_seconds=600)
+    await vida.transcribe(VIDEO)
+    assert stub.hints == [None]
+
+
+async def test_detection_can_be_turned_off():
+    vida, stub = _language_client(detect_seconds=0, chunk_seconds=600)
+    await vida.transcribe(VIDEO)
+    assert stub.hints == [None]
+
+
+async def test_an_unmappable_language_pins_nothing():
+    vida, stub = _language_client(detected="Klingon", detect_seconds=5, chunk_seconds=600)
+    await vida.transcribe(VIDEO)
+    assert stub.hints == [None, None]            # probed, learned nothing, carried on
+
+
+async def test_a_failed_probe_still_produces_a_transcript():
+    vida, stub = _language_client(fail=True, detect_seconds=5, chunk_seconds=600)
+    transcript = await vida.transcribe(VIDEO)
+    assert transcript.segments                   # detection is an optimisation, not a gate
+    assert stub.hints[1:] == [None]
+
+
+async def test_probe_audio_is_cleaned_up(tmp_path):
+    vida, stub = _language_client(detect_seconds=5, chunk_seconds=600)
+    await vida.transcribe(VIDEO)
+    assert not any(os.path.exists(path) for path in stub.seen)
+
+
+async def test_a_language_name_is_accepted_where_a_code_is_meant():
+    # "English" is what a person types and what Whisper reports back; "en" is
+    # the only thing the API takes.
+    vida, stub = _language_client(detect_seconds=5, chunk_seconds=600)
+    await vida.transcribe(VIDEO, language="English")
+    assert stub.hints == ["en"]
+
+
+async def test_an_unknown_language_is_passed_through_untouched():
+    vida, stub = _language_client(detect_seconds=5, chunk_seconds=600)
+    await vida.transcribe(VIDEO, language="yue")
+    assert stub.hints == ["yue"]

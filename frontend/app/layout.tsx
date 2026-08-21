@@ -1,6 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import {
+  Bricolage_Grotesque,
+  IBM_Plex_Mono,
+  IBM_Plex_Sans,
+} from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
+import { Backdrop } from "./components/backdrop";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // One quirky voice against two engineered ones: Bricolage carries the wordmark
 // and headings, Plex Sans reads long transcripts without drawing attention, and
@@ -44,17 +52,27 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${code.variable} h-full`}
+      // `dark` is not a toggle here — it is what switches on the `dark:`
+      // variants inside the shadcn components. The tokens themselves are
+      // dark at :root either way.
+      className={cn(
+        "dark h-full",
+        display.variable,
+        body.variable,
+        code.variable,
+      )}
     >
       <body className="min-h-full">
         {/* Keyboard users land here first and can jump past the header. */}
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-sm focus:bg-caption focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink"
+          className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
         >
           Skip to content
         </a>
-        {children}
+        <Backdrop />
+        <TooltipProvider>{children}</TooltipProvider>
+        <Toaster position="bottom-right" closeButton />
       </body>
     </html>
   );

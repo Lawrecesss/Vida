@@ -119,3 +119,62 @@ def test_empty_chunks_do_not_break_the_merge():
         ]
     )
     assert [s.text for s in merged.segments] == ["only line"]
+
+
+def _lang_chunk(index, start, end, language, spans):
+    """A chunk whose ASR request detected ``language`` for the whole of it."""
+    return (
+        AudioChunk(f"/tmp/chunk{index}.flac", start, end, index),
+        Transcript(
+            language=language,
+            segments=[
+                Segment(id=i, start=s, end=e, text=t) for i, (s, e, t) in enumerate(spans)
+            ],
+            duration=end - start,
+        ),
+    )
+
+
+def test_each_chunks_language_lands_on_its_own_segments():
+    """A bilingual recording keeps both languages, one per segment.
+
+    Whisper decides a single language per request, so a chunk boundary is the
+    only place the language can change. Losing that on the merge is what made
+    a bilingual video report as monolingual.
+    """
+    merged = merge_chunk_transcripts(
+        [
+            _lang_chunk(0, 0.0, 60.0, "en", [(1.0, 3.0, "hello"), (3.0, 6.0, "there")]),
+            _lang_chunk(1, 58.0, 118.0, "my", [(0.5, 3.0, "မင်္ဂလာပါ")]),
+        ]
+    )
+    assert [s.language for s in merged.segments] == ["en", "en", "my"]
+    assert merged.languages == ["en", "my"]
+    assert merged.is_multilingual
+
+
+def test_transcript_language_is_the_majority_by_speech_duration():
+    """A near-silent chunk must not outvote one carrying most of the speech."""
+    merged = merge_chunk_transcripts(
+        [
+            _lang_chunk(0, 0.0, 60.0, "my", [(0.0, 30.0, "long stretch of speech")]),
+            _lang_chunk(1, 58.0, 118.0, "en", [(0.5, 1.0, "hi")]),
+            _lang_chunk(2, 116.0, 176.0, "en", [(0.5, 1.0, "ok")]),
+        ]
+    )
+    # Two English chunks against one Burmese, but Burmese carries 30s of the
+    # 31s of speech — counting chunks would have picked the wrong one.
+    assert merged.language == "my"
+    assert merged.languages == ["my", "en"]
+
+
+def test_monolingual_audio_still_reports_one_language():
+    merged = merge_chunk_transcripts(
+        [
+            _lang_chunk(0, 0.0, 60.0, "en", [(1.0, 3.0, "one")]),
+            _lang_chunk(1, 58.0, 118.0, "en", [(0.5, 2.0, "two")]),
+        ]
+    )
+    assert merged.language == "en"
+    assert merged.languages == ["en"]
+    assert not merged.is_multilingual

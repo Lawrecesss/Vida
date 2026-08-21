@@ -10,11 +10,24 @@ produced a one-word transcript reading "You".
 Matching the phrases themselves is a losing game across languages, so we tighten
 the second half of Whisper's own test instead: past the no-speech threshold, a
 segment has to look confident to survive.
+
+Both thresholds below are calibrated against a pair of measured cases rather
+than one, which matters because the two overlap on raw noisy audio: a silent
+clip hallucinated "Thank you." at no_speech_prob 0.607 / confidence 0.518,
+while real speech under action-camera wind scored 0.607 / 0.567 — close enough
+that no threshold separates them. Cleaning the audio first (see
+``ASRConfig.audio_filter``) is what re-opens the gap: the same real speech then
+scores at most 0.50 and the same hallucination 0.67. The filter is therefore
+not only an accuracy win, it is what makes this test mean anything.
 """
 
 from __future__ import annotations
 
-__all__ = ["DEFAULT_NO_SPEECH_THRESHOLD", "is_silence"]
+import collections
+import re
+import string
+
+__all__ = ["DEFAULT_NO_SPEECH_THRESHOLD", "is_silence", "is_repetition_loop"]
 
 DEFAULT_NO_SPEECH_THRESHOLD = 0.6
 
@@ -50,3 +63,32 @@ def is_silence(
     if prob <= threshold:
         return False
     return confidence is None or confidence < _CONFIDENT_ENOUGH
+
+
+# Four is deliberately above "Fish! Fish!" and other real doubled exclamations,
+# which are common in excited speech and must survive.
+_LOOP_MINIMUM = 4
+
+# One word owning four fifths of a segment is a loop; three quarters is still
+# reachable by a real stutter ("I I I think"), so the bar sits above it.
+_LOOP_DOMINANCE = 0.8
+
+
+def is_repetition_loop(text: str) -> bool:
+    """Whether a segment is one word stuttered on a loop.
+
+    Whisper's other failure over noise is not invention but repetition: given
+    a stretch of wind or clatter it latches onto a syllable and emits it until
+    the window ends — "Bam bam bam bam bam", "and then, then, then, then".
+    Cleaning the audio surfaces more real speech and, with it, more of these,
+    so they are worth naming: when four or more words are almost all the same
+    word, the segment is not a transcription of anything.
+    """
+    words = [
+        word.strip(string.punctuation + "\u2026\u2019")
+        for word in re.split(r"\s+", text.strip().lower())
+    ]
+    words = [word for word in words if word]
+    if len(words) < _LOOP_MINIMUM:
+        return False
+    return collections.Counter(words).most_common(1)[0][1] / len(words) >= _LOOP_DOMINANCE

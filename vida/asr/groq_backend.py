@@ -1,7 +1,12 @@
 """Groq Whisper backend — the fastest hosted option we support.
 
-``whisper-large-v3-turbo`` on Groq runs at well over 100x realtime, which is
-what makes "transcribe an hour of video in seconds" achievable.
+Whisper on Groq runs at well over 100x realtime, which is what makes
+"transcribe an hour of video in seconds" achievable. The default here is
+``whisper-large-v3`` rather than the faster ``whisper-large-v3-turbo``:
+turbo's distilled 4-layer decoder mishears accented speech in ways that read
+as plausible English ("the crap that we are eating"), and at these speeds the
+difference between the two is seconds on an hour of video. Set
+``VIDA_ASR_MODEL=whisper-large-v3-turbo`` to trade back.
 """
 
 from __future__ import annotations
@@ -10,7 +15,7 @@ import asyncio
 import math
 
 from vida.asr.base import Transcriber
-from vida.asr.silence import DEFAULT_NO_SPEECH_THRESHOLD, is_silence
+from vida.asr.silence import DEFAULT_NO_SPEECH_THRESHOLD, is_repetition_loop, is_silence
 from vida.config import ASRConfig
 from vida.errors import MissingDependencyError, TranscriptionError
 from vida.types import Segment, Transcript
@@ -27,7 +32,7 @@ class GroqTranscriber(Transcriber):
 
     @property
     def default_model(self) -> str:
-        return "whisper-large-v3-turbo"
+        return "whisper-large-v3"
 
     def is_available(self) -> tuple[bool, str]:
         try:
@@ -118,6 +123,8 @@ def _to_transcript(
         # Hosted Whisper hallucinates over silence exactly as the local one does.
         if is_silence(_get(item, "no_speech_prob"), confidence, no_speech_threshold):
             continue
+        if is_repetition_loop(text):
+            continue
         segments.append(
             Segment(
                 id=index,
@@ -129,8 +136,11 @@ def _to_transcript(
         )
 
     # Some models return only flat text with no segment breakdown; keep the
-    # transcript usable rather than returning nothing.
-    if not segments:
+    # transcript usable rather than returning nothing. This is only a fallback
+    # for a response that had no segments at all — reaching for it after the
+    # silence filter emptied the list would hand back, as one long cue, the
+    # exact hallucination the filter just removed.
+    if not segments and not raw_segments:
         text = (_get(response, "text") or "").strip()
         duration = float(_get(response, "duration", 0.0) or 0.0)
         if text:

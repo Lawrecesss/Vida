@@ -45,6 +45,19 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+DEFAULT_AUDIO_FILTER = (
+    # Band-limit to the speech range first: an action camera's wind rumble is
+    # mostly below 100 Hz, and nothing above 7 kHz survives Whisper's 16 kHz
+    # input anyway. afftdn then subtracts what is left of the noise floor, and
+    # loudnorm brings quiet talkers up to a consistent level.
+    "highpass=f=100,"
+    "afftdn=nr=20:nf=-30,"
+    "lowpass=f=7000,"
+    "loudnorm=I=-16:TP=-1.5:LRA=11"
+)
+"""Measured on wind-heavy action-camera audio: see ``docs`` note in :mod:`vida.asr.silence`."""
+
+
 @dataclass
 class ASRConfig:
     """Speech-to-text settings."""
@@ -52,8 +65,15 @@ class ASRConfig:
     backend: ASRBackend = "auto"
     """Which engine to use. ``auto`` picks the fastest one whose key is present."""
 
-    model: str | None = None
-    """Backend-specific model id. ``None`` uses that backend's fast default."""
+    model: str | None = field(default_factory=lambda: os.getenv("VIDA_ASR_MODEL"))
+    """Backend-specific model id. ``None`` uses that backend's default.
+
+    Set ``VIDA_ASR_MODEL`` to override without touching code. On Groq the
+    choice that matters is the default ``whisper-large-v3`` against
+    ``whisper-large-v3-turbo``: turbo is a distilled decoder (4 layers rather
+    than 32) and gives up real accuracy on accented and non-English speech in
+    exchange for speed both are already fast enough at.
+    """
 
     groq_api_key: str | None = field(default_factory=lambda: os.getenv("GROQ_API_KEY"))
     openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
@@ -70,6 +90,32 @@ class ASRConfig:
         default_factory=lambda: os.getenv("VIDA_LOCAL_COMPUTE_TYPE", "auto")
     )
     """``auto`` picks float16 on a GPU and int8 on a CPU."""
+
+    audio_filter: str = field(
+        default_factory=lambda: os.getenv("VIDA_ASR_AUDIO_FILTER", DEFAULT_AUDIO_FILTER)
+    )
+    """ffmpeg filter chain applied once during audio extraction; empty disables it.
+
+    Real-world video is noisy — wind on a phone or an action camera sits right
+    on top of the speech — and Whisper does not merely mistranscribe through
+    noise, it goes quiet: whole exchanges come back as nothing at all. Cleaning
+    the audio before it reaches the model recovers them, and it also restores
+    the confidence scores :mod:`vida.asr.silence` depends on, which noise
+    otherwise pushes into the range real speech and hallucinations share.
+    """
+
+    detect_seconds: float = field(
+        default_factory=lambda: _env_float("VIDA_ASR_DETECT_SECONDS", 30.0)
+    )
+    """Seconds of audio used to detect the language before transcribing; 0 disables.
+
+    Whisper picks a language per 30-second window, so left to itself it can
+    change its mind halfway through a recording and start decoding English as
+    a language that merely sounds like it. Detecting once up front and pinning
+    the answer for every window costs one short extra request and removes that
+    failure entirely. Set it to 0 to let each window decide for itself, which
+    is what a genuinely multilingual recording wants.
+    """
 
     chunk_seconds: float = field(
         default_factory=lambda: _env_float("VIDA_ASR_CHUNK_SECONDS", 600.0)

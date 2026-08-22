@@ -87,6 +87,14 @@ class LocalTranscriber(Transcriber):
     def default_model(self) -> str:
         # `small` is the sweet spot for CPU: usable accuracy without the
         # multi-gigabyte download and latency of `large-v3`.
+        #
+        # That trade-off assumes someone is waiting. For batch work where
+        # nobody is — a movie processed overnight, anything scored by the
+        # accuracy harness in evals/asr — `VIDA_ASR_MODEL=medium` or
+        # `large-v3` is a straight accuracy win and needs no code change:
+        # `Transcriber.model` resolves `config.model or default_model` for
+        # every backend. Expect roughly 2x the wall clock per tier on CPU,
+        # much less on a GPU.
         return "small"
 
     def is_available(self) -> tuple[bool, str]:

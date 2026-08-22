@@ -1,0 +1,43 @@
+[
+  {
+    "id": "quiet-dialogue",
+    "media": "clips/quiet-dialogue.mp4",
+    "reference": "quiet-dialogue.reference.srt",
+    "kind": "quiet",
+    "language": "en",
+    "notes": "Two people, no score under them. The easy case; if WER is bad here nothing else matters."
+  },
+  {
+    "id": "music-bed",
+    "media": "clips/music-bed.mp4",
+    "reference": "music-bed.reference.srt",
+    "kind": "music",
+    "language": "en",
+    "notes": "Dialogue under a score. Watch the deletion rate, not the WER."
+  },
+  {
+    "id": "action-scene",
+    "media": "clips/action-scene.mp4",
+    "reference": "action-scene.reference.srt",
+    "kind": "noisy",
+    "language": "en",
+    "notes": "Effects bed, shouting, overlapping lines."
+  },
+  {
+    "id": "accented",
+    "media": "clips/accented.mp4",
+    "reference": "accented.reference.srt",
+    "kind": "accented",
+    "language": "en",
+    "notes": "Pin the language. Detection drift is a separate variable and this fixture is not measuring it."
+  },
+  {
+    "id": "character-names",
+    "media": "clips/character-names.mp4",
+    "reference": "character-names.reference.srt",
+    "kind": "vocabulary",
+    "language": "en",
+    "glossary": ["Aelith", "Corvain", "the Sundering", "Marrowgate"],
+    "notes": "Invented vocabulary. Run with and without --glossary; this is the fixture stream 3 is measured on."
+  }
+]

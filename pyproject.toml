@@ -47,6 +47,10 @@ all = [
     "langchain-openrouter>=0.2",
 ]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6"]
+# Word-error-rate scoring for the transcription accuracy harness in evals/asr.
+# Not in `dev`: the unit suite never scores accuracy, and jiwer is only needed
+# by someone actually running fixtures.
+eval = ["jiwer>=3.0"]
 
 [project.scripts]
 vida = "vida.cli:main"

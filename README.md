@@ -223,6 +223,51 @@ transcript = await vida.transcribe("talk.mp4", language="en")
 A genuinely multilingual recording is the one case that wants the opposite —
 set `VIDA_ASR_DETECT_SECONDS=0` to let each window decide for itself.
 
+**Name the vocabulary it cannot guess.** Whisper renders an unfamiliar proper
+noun as whatever ordinary words it sounds like, consistently and confidently, so
+a character name wrong once is wrong every time it is said. Pass the names:
+
+```python
+transcript = await vida.transcribe(
+    "film.mp4",
+    language="en",
+    glossary=["Aelith", "Corvain", "the Sundering"],
+)
+```
+
+Or `vida transcribe film.mp4 --glossary Aelith --glossary Corvain`, or
+`VIDA_ASR_GLOSSARY` for terms that apply to everything. Whisper's only
+vocabulary mechanism is the free-text prompt, so the terms are folded into it
+for you, with the glossary given priority over `prompt=` when the model's
+~224-token prompt window binds.
+
+### Longer-form and film-like material
+
+Three further knobs exist for it. All three default to off, because none of them
+has been measured to help on general material — see `evals/asr/` for the harness
+that would settle it:
+
+| Knob | What it does |
+|---|---|
+| `VIDA_ASR_MODEL=medium` (or `large-v3`) | On `local`, the default is `small`, picked for interactive latency. Batch work should trade that back for accuracy. |
+| `VIDA_ASR_DIALOGUE_FILTER='pan=mono\|c0=FC'` | Keeps only the 5.1 centre channel, where film dialogue is mixed, discarding the score and effects bed. Needs a genuine 5.1 source; `pan=mono\|c0=0.5*c0+0.5*c1` is the weaker stereo equivalent. |
+| `VIDA_ASR_SILENCE_AWARE_CHUNKING=1` | Moves chunk boundaries into gaps between lines rather than cutting on the clock. |
+
+### Measuring any of this
+
+`evals/asr/` scores word- and character-error rate against hand-corrected
+references, so a change can be shown to help rather than assumed to:
+
+```bash
+uv pip install -e '.[eval]'
+python -m evals.asr.run run --configs groq:whisper-large-v3,local:medium
+python -m evals.asr.run score
+python -m evals.asr.run report
+```
+
+Read the deleted-words column before the WER. Whisper's failure under a music
+bed is not mistranscription but silence, and the two have different fixes.
+
 ## Configuration
 
 Anything can be tuned through `VidaConfig`, or the matching environment variable:
@@ -240,8 +285,12 @@ vida = Vida(config)
 |---|---|---|
 | `VIDA_ASR_MODEL` | backend default | Override the ASR model without touching code |
 | `VIDA_ASR_AUDIO_FILTER` | denoise chain | ffmpeg filter applied during extraction; empty disables |
+| `VIDA_ASR_GLOSSARY` | none | Comma-separated terms to bias decoding toward |
+| `VIDA_ASR_DIALOGUE_FILTER` | none | ffmpeg filter run in the source channel layout, before the downmix |
 | `VIDA_ASR_DETECT_SECONDS` | `30` | Audio sampled to pin the language up front; `0` disables |
 | `VIDA_ASR_CHUNK_SECONDS` | `600` | Audio longer than this is split |
+| `VIDA_ASR_SILENCE_AWARE_CHUNKING` | `false` | Snap chunk boundaries to gaps in the speech |
+| `VIDA_ASR_CHUNK_BOUNDARY_SEARCH` | `3` | How far either side of a boundary to look for silence |
 | `VIDA_ASR_CONCURRENCY` | `8` | Chunks transcribed at once |
 | `VIDA_TRANSLATION_BATCH_SIZE` | `40` | Segments per translation call |
 | `VIDA_TRANSLATION_CONCURRENCY` | `8` | Translation batches in flight |

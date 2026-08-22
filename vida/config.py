@@ -45,6 +45,27 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    """Parse a boolean env var, accepting the spellings people actually type."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_list(name: str) -> list[str]:
+    """Split a comma-separated env var into terms.
+
+    Commas rather than spaces because the entries are phrases — a character
+    name is routinely two words, and splitting those apart would bias the
+    model toward each half separately.
+    """
+    raw = os.getenv(name)
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 DEFAULT_AUDIO_FILTER = (
     # Band-limit to the speech range first: an action camera's wind rumble is
     # mostly below 100 Hz, and nothing above 7 kHz survives Whisper's 16 kHz
@@ -73,10 +94,25 @@ class ASRConfig:
     ``whisper-large-v3-turbo``: turbo is a distilled decoder (4 layers rather
     than 32) and gives up real accuracy on accented and non-English speech in
     exchange for speed both are already fast enough at.
+
+    On ``local`` the default is ``small``, chosen for interactive latency on a
+    CPU. Batch work is the opposite trade: for a movie nobody is waiting on,
+    ``medium`` or ``large-v3`` is the single cheapest accuracy improvement
+    available here, and it costs no new configuration — this one field feeds
+    every backend.
     """
 
     groq_api_key: str | None = field(default_factory=lambda: os.getenv("GROQ_API_KEY"))
     openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+
+    glossary: list[str] = field(default_factory=lambda: _env_list("VIDA_ASR_GLOSSARY"))
+    """Names and jargon to bias decoding toward; ``VIDA_ASR_GLOSSARY`` is comma-separated.
+
+    Whisper's only vocabulary mechanism is the free-text ``prompt``, so these
+    are rendered into it (see :mod:`vida.asr.glossary`). Terms set here apply to
+    every call; ``Vida.transcribe(glossary=[...])`` extends them per call, which
+    is the level that matters for film, where the vocabulary is per title.
+    """
 
     no_speech_threshold: float = field(
         default_factory=lambda: _env_float("VIDA_NO_SPEECH_THRESHOLD", 0.6)
@@ -104,6 +140,23 @@ class ASRConfig:
     otherwise pushes into the range real speech and hallucinations share.
     """
 
+    dialogue_filter: str | None = field(
+        default_factory=lambda: os.getenv("VIDA_ASR_DIALOGUE_FILTER") or None
+    )
+    """ffmpeg filter applied in the *source* channel layout, before the mono downmix.
+
+    Off by default, and deliberately so: the presets in :mod:`vida.media.audio`
+    each assume something about how the source was mixed — ``pan=mono|c0=FC``
+    needs a real 5.1 centre channel and fails outright without one — and the
+    material reaching a general-purpose SDK is unknown. Film dialogue lives on
+    that centre channel, so where it applies it removes the score and effects
+    bed rather than trying to denoise them back out.
+
+    Note that turning this on moves the noise floor that
+    :attr:`no_speech_threshold` and :mod:`vida.asr.silence` were calibrated
+    against, so re-measure hallucination rate before relying on it.
+    """
+
     detect_seconds: float = field(
         default_factory=lambda: _env_float("VIDA_ASR_DETECT_SECONDS", 30.0)
     )
@@ -124,6 +177,28 @@ class ASRConfig:
 
     chunk_overlap: float = field(default_factory=lambda: _env_float("VIDA_ASR_CHUNK_OVERLAP", 2.0))
     """Seconds of overlap between audio chunks, so words on a seam aren't lost."""
+
+    silence_aware_chunking: bool = field(
+        default_factory=lambda: _env_bool("VIDA_ASR_SILENCE_AWARE_CHUNKING", False)
+    )
+    """Snap chunk boundaries to a gap in the speech instead of cutting on the clock.
+
+    Off by default. The overlap already rescues a word split across a seam, so
+    this is the smaller, second-order win — not splitting the word at all —
+    bought with one ``silencedetect`` pass per boundary. Measure it with
+    ``evals/asr`` on real fixtures before turning it on: on material with no
+    real gaps, every boundary falls back to the fixed one and the pass is pure
+    cost.
+    """
+
+    chunk_boundary_search_seconds: float = field(
+        default_factory=lambda: _env_float("VIDA_ASR_CHUNK_BOUNDARY_SEARCH", 3.0)
+    )
+    """How far either side of a boundary to look for silence.
+
+    Bounded on purpose: chunks stay within a few seconds of the configured
+    length, so the parallelism the chunking exists for is unaffected.
+    """
 
     concurrency: int = field(default_factory=lambda: _env_int("VIDA_ASR_CONCURRENCY", 8))
     """How many audio chunks to transcribe at once."""

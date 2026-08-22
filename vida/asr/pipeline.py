@@ -13,6 +13,7 @@ import collections
 import os
 
 from vida.asr.base import Transcriber
+from vida.asr.glossary import build_prompt
 from vida.asr.languages import to_code
 from vida.config import ASRConfig
 from vida.errors import MediaError, TranscriptionError, VidaError
@@ -34,11 +35,19 @@ async def transcribe_audio_file(
     *,
     language: str | None = None,
     prompt: str | None = None,
+    glossary: list[str] | None = None,
     work_dir: str | None = None,
     source: str | None = None,
     probe_source: str | None = None,
 ) -> Transcript:
     """Transcribe an audio file of any length, in parallel where it helps."""
+    # The one choke point both the single- and multi-chunk paths funnel through,
+    # so the vocabulary prompt is assembled once here rather than per chunk.
+    # Every chunk gets the same prompt: each is its own request with no memory
+    # of the last, so a term dropped from one chunk's prompt is a term that
+    # chunk cannot recognise.
+    prompt = build_prompt(prompt, [*(config.glossary or []), *(glossary or [])])
+
     if language is not None:
         # Callers reasonably say "English" where the models want "en". An
         # unrecognised value is passed through untouched rather than dropped —
@@ -59,6 +68,8 @@ async def transcribe_audio_file(
         chunk_seconds=config.chunk_seconds,
         overlap=config.chunk_overlap,
         out_dir=work_dir,
+        silence_aware=config.silence_aware_chunking,
+        search_seconds=config.chunk_boundary_search_seconds,
     )
 
     if len(chunks) == 1:
@@ -270,6 +281,7 @@ async def extract_audio_for(
     has_audio: bool,
     timeout: float = 900.0,
     audio_filter: str | None = None,
+    dialogue_filter: str | None = None,
 ) -> str:
     """Pull the audio track out of a video into ``work_dir``."""
     if not has_audio:
@@ -279,7 +291,11 @@ async def extract_audio_for(
     out_path = os.path.join(work_dir, f"{stem}.flac")
     try:
         return await extract_audio(
-            video_path, out_path, timeout=timeout, audio_filter=audio_filter
+            video_path,
+            out_path,
+            timeout=timeout,
+            audio_filter=audio_filter,
+            dialogue_filter=dialogue_filter,
         )
     except MediaError as exc:
         raise TranscriptionError(f"Could not extract audio from {video_path}: {exc}") from exc

@@ -31,6 +31,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     common.add_argument("--asr-model", default=None, help="Override the ASR model id.")
     common.add_argument("--language", default=None, help="Source language hint, e.g. 'en'.")
+    common.add_argument(
+        "--prompt", default=None,
+        help="Context to bias decoding: names, acronyms, jargon the model would mangle.",
+    )
+    common.add_argument(
+        "--glossary", default=None, action="append", metavar="TERM",
+        help="Term to bias decoding toward. Repeat, or pass a comma-separated list.",
+    )
 
     transcribe = sub.add_parser("transcribe", parents=[common], help="Transcribe a file.")
     transcribe.add_argument(
@@ -60,6 +68,19 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _glossary(args) -> list[str] | None:
+    """Flatten repeated --glossary flags, each of which may itself be a list.
+
+    Both spellings exist because both get typed: one flag per name when there
+    are three, and a pasted comma-separated line when there are thirty.
+    """
+    raw = getattr(args, "glossary", None)
+    if not raw:
+        return None
+    terms = [term.strip() for entry in raw for term in entry.split(",") if term.strip()]
+    return terms or None
+
+
 def _make_client(args) -> Vida:
     config = VidaConfig()
     if getattr(args, "asr", None):
@@ -72,7 +93,12 @@ def _make_client(args) -> Vida:
 async def _cmd_transcribe(args) -> int:
     async with _make_client(args) as vida:
         started = time.perf_counter()
-        transcript = await vida.transcribe(args.source, language=args.language)
+        transcript = await vida.transcribe(
+            args.source,
+            language=args.language,
+            prompt=args.prompt,
+            glossary=_glossary(args),
+        )
         elapsed = time.perf_counter() - started
 
     if args.output:
@@ -98,6 +124,8 @@ async def _cmd_translate(args) -> int:
             out_dir=args.out_dir,
             fmt=args.format,
             language=args.language,
+            prompt=args.prompt,
+            glossary=_glossary(args),
         )
         elapsed = time.perf_counter() - started
 

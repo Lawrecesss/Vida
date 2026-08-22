@@ -111,6 +111,7 @@ class Vida:
         *,
         language: str | None = None,
         prompt: str | None = None,
+        glossary: Iterable[str] | None = None,
     ) -> Transcript:
         """Transcribe the speech in a video or audio file.
 
@@ -118,6 +119,10 @@ class Vida:
             source: Path to a video or audio file.
             language: ISO-639-1 hint such as ``"en"``. Omit to auto-detect.
             prompt: Optional context (names, acronyms, jargon) to bias decoding.
+            glossary: Terms to bias decoding toward — character names, invented
+                vocabulary, product names. Extends
+                :attr:`~vida.config.ASRConfig.glossary` rather than replacing
+                it, and is folded into the prompt the model actually accepts.
 
         Returns:
             A timestamped :class:`~vida.types.Transcript`. Call
@@ -133,6 +138,7 @@ class Vida:
                 self.config.asr,
                 language=language,
                 prompt=prompt,
+                glossary=list(glossary) if glossary else None,
                 work_dir=work_dir,
                 source=source,
                 # Detect from the untouched media: the cleanup that helps the
@@ -218,6 +224,7 @@ class Vida:
         query: str | None = None,
         language: str | None = None,
         prompt: str | None = None,
+        glossary: Iterable[str] | None = None,
     ) -> VideoInsight:
         """Run the whole pipeline over one video in a single call.
 
@@ -232,6 +239,7 @@ class Vida:
             query: Question to focus the analysis on.
             language: Source-language hint for ASR.
             prompt: Vocabulary hint for ASR.
+            glossary: Terms to bias ASR decoding toward.
 
         Returns:
             A :class:`~vida.types.VideoInsight` holding everything produced,
@@ -260,6 +268,7 @@ class Vida:
                     self.config.asr,
                     language=language,
                     prompt=prompt,
+                    glossary=list(glossary) if glossary else None,
                     work_dir=work_dir,
                     source=source,
                 )
@@ -310,6 +319,8 @@ class Vida:
         out_dir: str | None = None,
         fmt: Literal["srt", "vtt"] = "srt",
         language: str | None = None,
+        prompt: str | None = None,
+        glossary: Iterable[str] | None = None,
     ) -> dict[str, str]:
         """Transcribe, translate, and write subtitle files in one call.
 
@@ -320,12 +331,19 @@ class Vida:
             out_dir: Where to write. Defaults to the video's own directory.
             fmt: ``"srt"`` or ``"vtt"``.
             language: Source-language hint for ASR.
+            prompt: Vocabulary hint for ASR.
+            glossary: Terms to bias ASR decoding toward.
 
         Returns:
             A mapping of language code to the subtitle file written.
         """
         insight = await self.process(
-            source, transcribe=True, translate_to=languages, language=language
+            source,
+            transcribe=True,
+            translate_to=languages,
+            language=language,
+            prompt=prompt,
+            glossary=glossary,
         )
         out_dir = out_dir or os.path.dirname(os.path.abspath(source))
         stem = os.path.splitext(os.path.basename(source))[0]
@@ -392,19 +410,25 @@ class Vida:
     async def _audio_for(self, media: MediaInfo, work_dir: str) -> str:
         """Path to transcribable audio for ``media``, extracting it if needed."""
         audio_filter = self.config.asr.audio_filter
+        dialogue_filter = self.config.asr.dialogue_filter
         extension = os.path.splitext(media.path)[1].lower()
         if extension in _AUDIO_EXTENSIONS:
             # Audio input normally skips the transcode entirely. A filter chain
             # is a reason to pay for one: noisy audio is noisy whichever
-            # container it arrived in.
-            if not audio_filter:
+            # container it arrived in, and a multichannel mix is still a
+            # multichannel mix.
+            if not audio_filter and not dialogue_filter:
                 return media.path
         elif not media.has_audio:
             raise MediaError(
                 f"{media.path} has no audio track, so there is nothing to transcribe."
             )
         return await extract_audio_for(
-            media.path, work_dir, media.has_audio, audio_filter=audio_filter
+            media.path,
+            work_dir,
+            media.has_audio,
+            audio_filter=audio_filter,
+            dialogue_filter=dialogue_filter,
         )
 
     @contextlib.contextmanager

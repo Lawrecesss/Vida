@@ -5,49 +5,68 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Vida — "prism on black".
+ * Vida — "one blue on paper".
  *
- * Sampled from Apple's iPad Pro tile on apple.com/sg: 96% of that image is
- * pure black, and the only colour is a chromatic-dispersion ribbon. Measured
- * hue peaks in the source, by pixel count:
+ * The palette is neutral-first: near-white surfaces, near-black text, hairline
+ * borders, and exactly one saturated hue. Colour is information here, not
+ * decoration — if a thing is blue it is either the primary action or a track
+ * you selected, and everything else is grey. That restraint is the whole look;
+ * adding a second brand colour is what would break it.
  *
- *   #ffd200  48°   #ffad00  36°   #ff6a00  24°   — the warm band
- *   #04afad 168°   #00e4ff 180°   #00b0ff 192°   — the cool band
- *   #0094ff 204°   #0064fd 216°   #0000fc 240°   — the blue band
+ * The blue is picked for contrast first and hue second. Both themes need the
+ * same colour to work as a fill *and* as text, which are opposite constraints,
+ * so each theme uses the end of the ramp its ground can carry:
  *
- * Note the gap: the source has essentially no true green (72°–156° is empty).
- * What reads as green there is the 168° teal, so that is what --color-teal is.
+ *   light  #1d4ed8   6.7:1 on white — legible as text, white sits on it
+ *   dark   #60a5fa   7.4:1 on the panel — legible as text, black sits on it
  *
- * The accents below are those hues lightened until they clear 4.5:1 on the
- * panel — the raw values are near-black in luminance and would fail as text.
+ * Buttons therefore read white-on-blue in light and black-on-blue in dark.
+ * That inversion is deliberate: a single mid blue that satisfies both is dull
+ * enough to look grey.
+ *
+ * The secondary hues exist only to keep four subtitle tracks apart at a
+ * glance (see tracks.tsx). They are spread across the wheel and each one is
+ * taken to 4.5:1 on its own theme's panel, so a track label is always readable
+ * rather than merely tinted.
  *
  * shadcn/ui supplies the components; this file is what stops them looking like
  * every other shadcn app. Every semantic token below is pointed at a Vida
- * colour, so `bg-primary` is the amber and `bg-card` is the panel — the
+ * colour, so `bg-primary` is the blue and `bg-card` is the panel — the
  * components inherit the identity instead of overriding it.
  */
 @theme inline {
   /* Vida's own names, still used where the meaning is literal: the video
-     frame is ink, a translated track is cyan. The greys are near-neutral now
-     rather than blue-grey, so the colour on the page is only ever an accent. */
-  --color-ink: #000000;
-  --color-stage: #0b0c0e;
-  --color-panel: #141518;
-  --color-raised: #1c1e23;
-  --color-edge: #282b31;
+     frame is ink, a translated track is cyan.
+
+     These indirect through the theme blocks below rather than holding
+     literals, because there are two themes and every colour has to move.
+
+     `ink` is the one that does *not* move. It is the video stage — the
+     letterbox behind a frame, the strip behind the waveform — and video is
+     letterboxed against black in a light room as much as a dark one. Making
+     it pale in the light theme (which is what it used to do) turned the one
+     dark panel on the page into another grey card and threw away the contrast
+     the caption is rendered for. `paper` is what is written on ink, so it
+     stays light in both themes too. */
+  --color-ink: var(--ink);
+  --color-stage: var(--stage);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-edge: var(--edge);
   /* Control boundaries need 3:1 against their surface (WCAG 1.4.11); --edge is
-     1.29:1 and is for decorative separators only. Measured: 3.40 on panel,
-     3.22 through the glass panel. */
-  --color-line: #666b73;
-  --color-paper: #f2f3f5;
-  /* The ribbon, one colour per band. --caption keeps its name: it is still the
-     colour a subtitle is rendered in, now amber instead of teletext yellow. */
-  --color-caption: #ffb020;
-  --color-teal: #2fd4bd;
-  --color-cyan: #3ecfef;
-  --color-blue: #4d9bff;
-  --color-magenta: #ff5c8a;
-  --color-alert: #ff5c47;
+     for decorative separators only. Measured: 3.2:1 on white in light, 3.8:1
+     on the panel in dark. */
+  --color-line: var(--line);
+  --color-paper: var(--paper);
+  /* The accents. --caption keeps its name: it is the colour a subtitle is
+     rendered in, and it is the brand blue, because the subtitle is the
+     product. */
+  --color-caption: var(--caption);
+  --color-teal: var(--teal);
+  --color-cyan: var(--cyan);
+  --color-blue: var(--blue);
+  --color-magenta: var(--magenta);
+  --color-alert: var(--alert);
 
   /* shadcn semantics, pointed at the palette above. */
   --color-background: var(--background);
@@ -79,8 +98,68 @@
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, SFMono-Regular, monospace;
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /*
+   * The type scale.
+   *
+   * Two families of sizes. The small end is UI furniture and is fixed: cue
+   * numbers, timecodes, labels. The large end is editorial and is fluid —
+   * headings interpolate between a phone and a 5K display rather than
+   * stepping at a breakpoint, because a heading that is dominant at 1440px is
+   * a wall of text at 380px.
+   *
+   * Named steps so the next size added has to be a decision rather than a
+   * keystroke. Additive: Tailwind's own `text-sm`/`text-base`/`text-lg` are
+   * untouched and still mean what they always meant.
+   *
+   *   micro     cue numbers, the smallest mono furniture
+   *   meta      timecodes, file sizes, backend names — the dominant small size
+   *   label     control labels and secondary lines
+   *   body      the readable size for transcript text
+   *   lead      supporting copy under a heading
+   *   wordmark  the brand in the header
+   *   heading   section headings
+   *   display   the one page headline
+   */
+  --text-micro: 0.625rem;
+  --text-meta: 0.6875rem;
+  --text-label: 0.8125rem;
+  --text-body: 0.9375rem;
+
+  --text-lead: clamp(1rem, 0.94rem + 0.3vw, 1.1875rem);
+  --text-lead--line-height: 1.55;
+
+  --text-wordmark: 1.375rem;
+  --text-wordmark--line-height: 1;
+  --text-wordmark--letter-spacing: -0.03em;
+
+  --text-heading: clamp(1.375rem, 1.15rem + 1vw, 1.875rem);
+  --text-heading--line-height: 1.15;
+  --text-heading--letter-spacing: -0.025em;
+
+  /* Negative tracking is what makes a large grotesk read as display type
+     rather than as body copy blown up; 0.98 line-height lets two lines lock
+     together into a block. Both only work this hard above ~36px, which is why
+     they live on this step and not on --text-heading. */
+  --text-display: clamp(2.125rem, 1.4rem + 3vw, 3.5rem);
+  --text-display--line-height: 0.98;
+  --text-display--letter-spacing: -0.04em;
+
+  /*
+   * Page gutter, likewise fluid: 20px on a phone, 32px on a tablet, 48px on a
+   * wide display — the three values the layout was designed against. A fixed
+   * small value leaves a wide display looking like a stretched phone.
+   */
+  --spacing-gutter: clamp(1.25rem, 0.6rem + 2vw, 3rem);
+
+  /*
+   * One radius language. Everything derives from --radius so the ratios hold
+   * when it moves: hairline controls stay tighter than cards, cards stay
+   * tighter than the panels that contain them. Badges and buttons opt out
+   * into a pill instead — those are the two things in the design that are
+   * meant to read as capsules.
+   */
+  --radius-sm: calc(var(--radius) * 0.55);
+  --radius-md: calc(var(--radius) * 0.7);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
@@ -89,44 +168,176 @@
 }
 
 /*
- * One theme, not two. The interface is dark-only — a grading suite is not lit
- * like an office — so the values live on :root and `.dark` on <html> exists
- * only to switch on the `dark:` variants baked into the shadcn components.
+ * Two themes.
+ *
+ * Light is the primary one now: a near-white page, hairline borders, and the
+ * blue used sparingly. Dark is not that inverted — inverting #1d4ed8 onto
+ * black gives 2.4:1, which is unreadable — it is the same hue taken the other
+ * way up the ramp until it clears 4.5:1 on the dark panel.
+ *
+ * Both grounds are neutral rather than tinted. The page carries one hue and
+ * a warm or cool grey underneath it is a second hue competing with it.
  */
-:root,
-.dark {
-  --background: #0b0c0e;
-  --foreground: #f2f3f5;
-  --card: #141518;
-  --card-foreground: #f2f3f5;
-  --popover: #1c1e23;
-  --popover-foreground: #f2f3f5;
-  /* The amber is the primary action colour; true black sits on it (measured
-     11.5:1), which is why buttons read as black-on-amber. */
-  --primary: #ffb020;
-  --primary-foreground: #000000;
-  --secondary: #1c1e23;
-  --secondary-foreground: #f2f3f5;
-  --muted: #1c1e23;
-  --muted-foreground: #9096a1;
-  --accent: #212429;
-  --accent-foreground: #f2f3f5;
-  --destructive: #ff5c47;
-  --destructive-foreground: #000000;
-  --border: #282b31;
-  --input: #666b73;
-  --ring: #ffb020;
-  --chart-1: #ffb020;
-  --chart-2: #2fd4bd;
-  --chart-3: #4d9bff;
-  --chart-4: #ff5c8a;
-  --chart-5: #3ecfef;
-  /* Broadcast furniture is square-ish; nothing here is a pill except badges. */
-  --radius: 0.5rem;
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  /* White on this blue is 6.7:1, so the same value works as a fill *and* as
+     text — which is why `text-primary` and `bg-primary` can be the one token
+     rather than a light pair. */
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #111111;
+  --muted: #f7f7f5;
+  --muted-foreground: #555555;
+  --accent: #f1f1ef;
+  --accent-foreground: #111111;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --border: #e5e5e5;
+  --input: #8d8d8d;
+  --ring: #1d4ed8;
+  --chart-1: #1d4ed8;
+  --chart-2: #0f766e;
+  --chart-3: #0e7490;
+  --chart-4: #be185d;
+  --chart-5: #6d28d9;
 
+  /* Vida's own names. `ink` is the video stage: dark in both themes, because
+     a frame is letterboxed against black whatever the room is doing. */
+  --ink: #0c0d0f;
+  --stage: #ffffff;
+  --panel: #ffffff;
+  --raised: #f7f7f5;
+  --edge: #e5e5e5;
+  --line: #8d8d8d;
+  --paper: #ffffff;
+  --caption: #1d4ed8;
+  --teal: #0f766e;
+  --cyan: #0e7490;
+  --blue: #2563eb;
+  --magenta: #be185d;
+  --alert: #b91c1c;
+
+  /* Surface effects. On a white page a card is separated by its border and a
+     shadow so soft it is almost only a hint of one — a heavy shadow here
+     reads as dirt, and a page of floating cards reads as a dashboard rather
+     than as a document. */
+  --glass-border: #e5e5e5;
+  --glass-highlight: rgba(255, 255, 255, 0);
+  --glass-shadow: 0 10px 30px -12px rgba(17, 17, 17, 0.08);
+  --glass-panel-shadow: 0 20px 60px -24px rgba(17, 17, 17, 0.12);
+  --glass-control-highlight: rgba(255, 255, 255, 0);
+
+  /* The room the tool sits in. Every number here is meant to sit at or below
+     the threshold of noticing: on a white ground the same values that read as
+     atmosphere on black read as damage. */
+  --grid-ink: rgba(17, 17, 17, 0.035);
+  --grain-opacity: 0.035;
+  --grain-blend: multiply;
+  --vignette-ink: rgba(17, 17, 17, 0.035);
+  --aurora-opacity: 0.5;
+
+  /* The caption is rendered on ink in both themes, so its halo is black in
+     both — it separates white text from a bright frame. */
+  --caption-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.9),
+    0 2px 14px rgba(0, 0, 0, 0.85);
+
+  /* Decorative only — the aurora blooms are never text, so they stay vivid in
+     both themes rather than following the contrast-bound accents above. */
+  --glow-primary: #3b82f6;
+  --glow-cyan: #22d3ee;
+  --glow-violet: #8b5cf6;
+
+  /* Cards 17px, panels 22px, controls 8px. */
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: #0a0a0b;
+  --foreground: #f4f4f5;
+  --card: #131417;
+  --card-foreground: #f4f4f5;
+  --popover: #17181c;
+  --popover-foreground: #f4f4f5;
+  /* The other end of the same ramp: 7.4:1 on the panel as text, and near-black
+     sits on it at 8.2:1 as a fill. Hence black-on-blue buttons here against
+     white-on-blue in light. */
+  --primary: #60a5fa;
+  --primary-foreground: #06070a;
+  --secondary: #1a1b1f;
+  --secondary-foreground: #f4f4f5;
+  --muted: #17181c;
+  --muted-foreground: #a1a1aa;
+  --accent: #1f2025;
+  --accent-foreground: #f4f4f5;
+  --destructive: #f87171;
+  --destructive-foreground: #06070a;
+  --border: #26272b;
+  --input: #6c6d74;
+  --ring: #60a5fa;
+  --chart-1: #60a5fa;
+  --chart-2: #2dd4bf;
+  --chart-3: #22d3ee;
+  --chart-4: #f472b6;
+  --chart-5: #a78bfa;
+
+  --ink: #000000;
+  --stage: #0a0a0b;
+  --panel: #131417;
+  --raised: #1a1b1f;
+  --edge: #26272b;
+  --line: #6c6d74;
+  --paper: #ffffff;
+  --caption: #60a5fa;
+  --teal: #2dd4bf;
+  --cyan: #22d3ee;
+  --blue: #3b82f6;
+  --magenta: #f472b6;
+  --alert: #f87171;
+
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  --glass-panel-shadow: 0 20px 60px -24px rgba(0, 0, 0, 0.75);
+  --glass-control-highlight: rgba(255, 255, 255, 0.05);
+
+  --grid-ink: rgba(255, 255, 255, 0.035);
+  --grain-opacity: 0.03;
+  --grain-blend: overlay;
+  --vignette-ink: color-mix(in oklab, #000000 28%, transparent);
+  --aurora-opacity: 0.9;
+
+  --caption-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.9),
+    0 2px 14px rgba(0, 0, 0, 0.85);
+
+  --glow-primary: #3b82f6;
+  --glow-cyan: #22d3ee;
+  --glow-violet: #8b5cf6;
+
+  --radius: 0.75rem;
+}
+
+/* Motion is the same in both themes; only colour changes.
+
+   The easing curves are shared rather than left to per-rule `ease-in` /
+   `ease-out` keywords, which is what the app was doing: the browser defaults
+   are symmetrical and a little limp, and every animation having its own
+   opinion is why the motion never quite read as one system. Both curves start
+   gently and finish decisively — movement that settles rather than stops. */
+:root {
   --duration-exit: 150ms;
   --duration-enter: 210ms;
   --duration-move: 400ms;
+
+  --ease-out: cubic-bezier(0.6, 0, 0.15, 1);
+  --ease-move: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 /* View transition recipes, taken from the react-view-transitions skill rather
@@ -152,23 +363,23 @@
 }
 
 ::view-transition-old(.fade-out) {
-  animation: var(--duration-exit) ease-in fade reverse;
+  animation: var(--duration-exit) var(--ease-out) fade reverse;
 }
 
 ::view-transition-new(.fade-in) {
-  animation: var(--duration-enter) ease-out var(--duration-exit) both fade;
+  animation: var(--duration-enter) var(--ease-out) var(--duration-exit) both fade;
 }
 
 ::view-transition-old(.slide-down) {
   animation:
-    var(--duration-exit) ease-out both fade reverse,
-    var(--duration-exit) ease-out both slide-y reverse;
+    var(--duration-exit) var(--ease-out) both fade reverse,
+    var(--duration-exit) var(--ease-out) both slide-y reverse;
 }
 
 ::view-transition-new(.slide-up) {
   animation:
-    var(--duration-enter) ease-in var(--duration-exit) both fade,
-    var(--duration-move) ease-in both slide-y;
+    var(--duration-enter) var(--ease-out) var(--duration-exit) both fade,
+    var(--duration-move) var(--ease-move) both slide-y;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -223,11 +434,20 @@
   body {
     @apply bg-background text-foreground font-sans;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Display type is set tight and optically aligned; the browser default of
+     `normal` leaves large grotesk looking loose and slightly amateur. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--color-caption) 30%, transparent);
-    color: var(--color-paper);
+    background-color: color-mix(in oklab, var(--color-caption) 22%, transparent);
+    color: var(--color-foreground);
   }
 
   /* One focus treatment everywhere, in the accent, always visible. */
@@ -239,14 +459,34 @@
 }
 
 /*
+ * The page container. `min()` rather than a max-width plus padding so the
+ * gutter and the ceiling are one rule, and every section lands on the same
+ * left edge — the alignment is most of what reads as "designed" here.
+ */
+.container-page {
+  width: min(100% - 2 * var(--spacing-gutter), 80rem);
+  margin-inline: auto;
+}
+
+/*
+ * An eyebrow: the small mono uppercase line above a heading. Letter-spaced far
+ * wider than text ever should be, which is exactly why it reads as a label and
+ * not as a sentence.
+ */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/*
  * Subtitles carry a shadow so they stay legible over any frame. The caption
  * line here is real text over a real black frame, so it gets the real
  * treatment.
  */
 .caption-text {
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.9),
-    0 2px 14px rgba(0, 0, 0, 0.85);
+  text-shadow: var(--caption-shadow);
 }
 
 /*
@@ -289,7 +529,16 @@
 }
 
 .playhead {
-  animation: playhead 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: playhead 1.8s var(--ease-move) infinite;
+}
+
+/* Links and buttons that end in an arrow: the arrow moves, not the label. */
+.arrow-link svg {
+  transition: transform var(--duration-enter) var(--ease-out);
+}
+
+.arrow-link:hover svg {
+  transform: translateX(3px);
 }
 
 .wrap-anywhere {
@@ -305,15 +554,26 @@
   }
 }
 
-/* Honour an explicit contrast preference by strengthening lines and dimmed text. */
+/* Honour an explicit contrast preference by strengthening lines and dimmed text.
+   Both themes need it, and each needs it in its own direction — the light theme
+   darkens its greys, the dark theme brightens them. */
 @media (prefers-contrast: more) {
-  :root,
+  :root {
+    --muted-foreground: #3f3f42;
+    --border: #b4b4b4;
+    --input: #6e6e6e;
+    --edge: #b4b4b4;
+    --line: #6e6e6e;
+    --glass-border: #b4b4b4;
+  }
+
   .dark {
-    --muted-foreground: #bcc1c9;
-    --border: #5a5f68;
-    --input: #8d939c;
-    --color-edge: #5a5f68;
-    --color-line: #8d939c;
+    --muted-foreground: #d4d4d8;
+    --border: #56575d;
+    --input: #90919a;
+    --edge: #56575d;
+    --line: #90919a;
+    --glass-border: rgba(255, 255, 255, 0.24);
   }
 }
 
@@ -339,6 +599,8 @@
  *
  * Everything here is behind the content and pointer-events:none. The numbers
  * are deliberately timid — this is the room the tool sits in, not the tool.
+ * On a white page that timidity is not optional: the previous broadcast
+ * scanlines were designed against black and turned a light page grey.
  * ------------------------------------------------------------------------- */
 
 .aurora {
@@ -346,15 +608,16 @@
      the falloff is baked into the gradient instead and nothing here animates
      anything but `transform`. */
   filter: blur(40px);
+  opacity: var(--aurora-opacity);
   will-change: transform;
   animation: drift 38s ease-in-out infinite alternate;
 }
 
-.aurora-caption {
+.aurora-primary {
   background: radial-gradient(
     circle at center,
-    color-mix(in oklab, var(--color-caption) 19%, transparent) 0%,
-    color-mix(in oklab, var(--color-caption) 6%, transparent) 42%,
+    color-mix(in oklab, var(--glow-primary) 14%, transparent) 0%,
+    color-mix(in oklab, var(--glow-primary) 4%, transparent) 42%,
     transparent 68%
   );
 }
@@ -362,19 +625,19 @@
 .aurora-cyan {
   background: radial-gradient(
     circle at center,
-    color-mix(in oklab, var(--color-cyan) 17%, transparent) 0%,
-    color-mix(in oklab, var(--color-cyan) 5%, transparent) 42%,
+    color-mix(in oklab, var(--glow-cyan) 12%, transparent) 0%,
+    color-mix(in oklab, var(--glow-cyan) 4%, transparent) 42%,
     transparent 68%
   );
   animation-duration: 46s;
   animation-delay: -12s;
 }
 
-.aurora-blue {
+.aurora-violet {
   background: radial-gradient(
     circle at center,
-    color-mix(in oklab, var(--color-blue) 20%, transparent) 0%,
-    color-mix(in oklab, var(--color-blue) 6%, transparent) 42%,
+    color-mix(in oklab, var(--glow-violet) 13%, transparent) 0%,
+    color-mix(in oklab, var(--glow-violet) 4%, transparent) 42%,
     transparent 68%
   );
   animation-duration: 54s;
@@ -390,30 +653,33 @@
   }
 }
 
-/* Broadcast furniture: a 3px line cycle, just past the threshold of noticing. */
-.scanlines {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.22) 0px,
-    rgba(0, 0, 0, 0.22) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  opacity: 0.35;
+/*
+ * A 72px engineering grid, faded out towards the bottom of the viewport. It
+ * replaces the old scanline cycle: both are "this is a technical tool" cues,
+ * but a grid is architectural where scanlines are CRT, and the page is a
+ * document now rather than a monitor.
+ */
+.grid-lines {
+  background-image:
+    linear-gradient(to right, var(--grid-ink) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-ink) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 72%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 72%);
 }
 
 /* Static grain. feTurbulence renders once into a tile and then costs nothing. */
 .grain {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: 0.035;
-  mix-blend-mode: overlay;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
 }
 
 .vignette {
   background: radial-gradient(
     ellipse 90% 70% at 50% 40%,
     transparent 0%,
-    color-mix(in oklab, var(--color-ink) 32%, transparent) 100%
+    var(--vignette-ink) 100%
   );
 }
 
@@ -425,30 +691,39 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Glass surfaces.
+ * Surfaces.
  *
- * Three things together make a pane read as glass rather than as a grey box:
- * it lets the backdrop's colour through, it *saturates* what it blurs (real
- * glass concentrates colour), and it catches a specular highlight along its
- * top edge. The inset hairline is the one people leave out, and it is the one
- * doing most of the work.
+ * `.glass` is the one card treatment: an opaque-ish pane, a hairline border,
+ * and a shadow soft enough to be felt rather than seen. It still blurs and
+ * saturates what is behind it, which is what keeps the aurora readable as
+ * light in the room instead of as a smudge under the card — but the mix is
+ * far closer to opaque than it used to be, because text on a light page needs
+ * a settled ground to sit on.
  * ------------------------------------------------------------------------- */
 .glass {
-  background-color: color-mix(in oklab, var(--color-panel) 58%, transparent);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background-color: color-mix(in oklab, var(--color-panel) 82%, transparent);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid var(--glass-border);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    0 16px 40px -12px rgba(0, 0, 0, 0.7);
+    inset 0 1px 0 var(--glass-highlight),
+    var(--glass-shadow);
+}
+
+/* The one panel that frames everything else gets the deeper shadow — depth is
+   hierarchy, so exactly one thing on the page is allowed to float. */
+.glass-panel {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    var(--glass-panel-shadow);
 }
 
 /* Smaller controls: same idea, less of everything, or they turn milky. */
 .glass-control {
-  background-color: color-mix(in oklab, var(--color-raised) 45%, transparent);
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background-color: color-mix(in oklab, var(--color-raised) 70%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-control-highlight);
 }
 
 /*

@@ -174,7 +174,7 @@ export function Editor({
 
   if (!cue) {
     return (
-      <Card className="glass p-8 text-center text-sm text-muted-foreground">
+      <Card className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
         This track has no timed cues to edit.
       </Card>
     );
@@ -188,8 +188,8 @@ export function Editor({
             player would put it. A mock can get away with a black box; the
             point of checking a subtitle is seeing it against the frame.
         --------------------------------------------------------------- */}
-        <Card className="glass flex flex-col gap-3 p-4">
-          <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-ink">
+        <Card className="glass rounded-2xl flex flex-col gap-3 p-4">
+          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-ink">
             {previewUrl ? (
               <video
                 ref={videoRef}
@@ -200,12 +200,12 @@ export function Editor({
                 onEnded={() => setPlaying(false)}
               />
             ) : (
-              <div className="absolute inset-0 grid place-items-center font-mono text-[0.6875rem] tracking-[0.2em] text-paper/25 uppercase">
+              <div className="absolute inset-0 grid place-items-center font-mono text-meta tracking-[0.2em] text-paper/25 uppercase">
                 no preview
               </div>
             )}
             {overlay && (
-              <p className="caption-text absolute inset-x-0 bottom-[9%] z-10 px-[6%] text-center text-base leading-snug font-semibold text-white sm:text-lg">
+              <p className="caption-text absolute inset-x-0 bottom-[9%] z-10 px-[6%] text-center text-base leading-snug font-semibold text-paper sm:text-lg">
                 {overlay.text}
               </p>
             )}
@@ -220,10 +220,10 @@ export function Editor({
             >
               {playing ? <PauseIcon /> : <PlayIcon />}
             </Button>
-            <span className="font-mono text-[0.8125rem] tabular-nums">
+            <span className="font-mono text-label tabular-nums">
               {secondsToTimecode(time).slice(3, 8)}
             </span>
-            <span className="font-mono text-[0.8125rem] tabular-nums text-muted-foreground">
+            <span className="font-mono text-label tabular-nums text-muted-foreground">
               / {secondsToTimecode(total).slice(3, 8)}
             </span>
             <div className="ms-auto flex gap-1.5">
@@ -250,12 +250,12 @@ export function Editor({
         </Card>
 
         {/* Inspector for the selected cue. */}
-        <Card className="glass flex flex-col gap-4 p-4">
+        <Card className="glass rounded-2xl flex flex-col gap-4 p-4">
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase">
+            <h3 className="font-mono text-meta tracking-[0.18em] text-muted-foreground uppercase">
               Cue {cue.index.toString().padStart(2, "0")}
             </h3>
-            <Badge variant="outline" className="font-mono text-[0.625rem]">
+            <Badge variant="outline" className="font-mono text-micro">
               {track.label}
             </Badge>
           </div>
@@ -334,12 +334,12 @@ export function Editor({
           like evidence. These blocks are the cues themselves, which is the
           thing you are actually editing.
       ----------------------------------------------------------------- */}
-      <Card className="glass flex flex-col gap-2 p-4">
+      <Card className="glass rounded-2xl flex flex-col gap-2 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase">
+          <h3 className="font-mono text-meta tracking-[0.18em] text-muted-foreground uppercase">
             Timeline
           </h3>
-          <span className="font-mono text-[0.6875rem] text-muted-foreground">
+          <span className="font-mono text-meta text-muted-foreground">
             click a cue to select · click the track to scrub
           </span>
         </div>
@@ -350,13 +350,13 @@ export function Editor({
             const box = event.currentTarget.getBoundingClientRect();
             seek(((event.clientX - box.left) / box.width) * total);
           }}
-          className="relative h-24 cursor-pointer overflow-hidden rounded-md border bg-ink/50"
+          className="relative h-24 cursor-pointer overflow-hidden rounded-lg border bg-ink/50"
         >
           <div className="absolute inset-x-0 top-0 flex h-5 border-b">
             {Array.from({ length: 8 }, (_, i) => (
               <span
                 key={i}
-                className="flex-1 border-s ps-1 font-mono text-[0.625rem] text-muted-foreground"
+                className="flex-1 border-s ps-1 font-mono text-micro text-muted-foreground"
               >
                 {secondsToTimecode((total / 8) * i).slice(3, 8)}
               </span>
@@ -382,10 +382,10 @@ export function Editor({
                     width: `${Math.max(((to - from) / total) * 100, 0.4)}%`,
                   }}
                   className={cn(
-                    "absolute top-2 h-10 overflow-hidden rounded-[3px] border px-1 text-start font-mono text-[0.625rem] transition-colors",
+                    "absolute top-2 h-10 overflow-hidden rounded-[3px] border px-1 text-start font-mono text-micro transition-colors",
                     i === index
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-white/15 bg-white/8 text-muted-foreground hover:bg-white/15",
+                      : "border-edge bg-muted/60 text-muted-foreground hover:bg-muted",
                   )}
                 >
                   {c.index.toString().padStart(2, "0")}
@@ -405,14 +405,14 @@ export function Editor({
       </Card>
 
       {/* Every cue, as a table. Clicking a row selects and seeks. */}
-      <Card className="glass flex min-h-0 flex-col overflow-hidden p-0">
+      <Card className="glass rounded-2xl flex min-h-0 flex-col overflow-hidden p-0">
         <div className="flex items-center justify-between gap-2 px-4 py-2">
           <div className="flex items-center gap-2">
-            <Badge variant="ghost" className="font-mono text-[0.6875rem]">
+            <Badge variant="ghost" className="font-mono text-meta">
               {cues.length} cues
             </Badge>
             {edited && (
-              <Badge variant="secondary" className="font-mono text-[0.6875rem]">
+              <Badge variant="secondary" className="font-mono text-meta">
                 edited
               </Badge>
             )}
@@ -458,10 +458,10 @@ export function Editor({
                   i === index && "bg-primary/10",
                 )}
               >
-                <span className="font-mono text-[0.6875rem] tabular-nums text-muted-foreground">
+                <span className="font-mono text-meta tabular-nums text-muted-foreground">
                   {c.index.toString().padStart(2, "0")}
                 </span>
-                <span className="flex items-center gap-1 font-mono text-[0.6875rem] tabular-nums text-muted-foreground">
+                <span className="flex items-center gap-1 font-mono text-meta tabular-nums text-muted-foreground">
                   {shortTimecode(c.start)}
                   <span aria-hidden>→</span>
                   {shortTimecode(c.end)}
@@ -473,14 +473,14 @@ export function Editor({
                   )}
                 </span>
                 {sourceCues && (
-                  <span className="hidden text-[0.875rem] leading-6 text-muted-foreground sm:block">
+                  <span className="hidden text-sm leading-6 text-muted-foreground sm:block">
                     {sourceCues[i]?.text ?? ""}
                   </span>
                 )}
                 <span
                   lang={track.lang}
                   dir="auto"
-                  className="wrap-anywhere text-[0.875rem] leading-6 text-foreground/90"
+                  className="wrap-anywhere text-sm leading-6 text-foreground/90"
                 >
                   {c.text}
                 </span>
@@ -512,7 +512,7 @@ function Stat({
       >
         {value}
       </span>
-      <span className="text-[0.6875rem] tracking-[0.08em] text-muted-foreground uppercase">
+      <span className="text-meta tracking-[0.08em] text-muted-foreground uppercase">
         {label}
       </span>
     </span>
@@ -521,7 +521,7 @@ function Stat({
 
 function Problem({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex items-start gap-2 text-[0.8125rem] leading-5 text-destructive">
+    <p className="flex items-start gap-2 text-label leading-5 text-destructive">
       <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
       {children}
     </p>
@@ -568,7 +568,7 @@ function TimecodeField({
           aria-invalid={bad || invalid}
           inputMode="numeric"
           spellCheck={false}
-          className="glass-control font-mono text-[0.8125rem] tabular-nums"
+          className="glass-control font-mono text-label tabular-nums"
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {

@@ -1,14 +1,18 @@
 "use client"
 
+import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-// The interface is dark-only, so the toaster is too — no next-themes, no
-// provider, no flash of a light toast on a dark page.
+// Sonner renders its own surface rather than inheriting the page's, so it has
+// to be told which theme it is in. `resolvedTheme` rather than `theme`: this
+// wants the answer, and "system" is a question.
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { resolvedTheme } = useTheme()
+
   return (
     <Sonner
-      theme="dark"
+      theme={(resolvedTheme ?? "dark") as ToasterProps["theme"]}
       className="toaster group"
       icons={{
         success: (

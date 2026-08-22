@@ -39,7 +39,7 @@ type Props = {
  *
  * It is the drop target, the progress indicator, and the status line all in one
  * place — but each of those gets its own slot rather than sharing one. The
- * caption line, in the lower third and in the amber, says what the run is
+ * caption line, in the lower third and in the brand blue, says what the run is
  * doing; the slate strip underneath says what the file is.
  *
  * The frame itself stays hand-built — no component library ships a viewfinder —
@@ -92,7 +92,7 @@ export function Letterbox({
           accept(event.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "control safe-area relative flex aspect-video w-full cursor-pointer flex-col justify-end overflow-hidden rounded-lg bg-ink transition-all",
+          "control safe-area relative flex aspect-video w-full cursor-pointer flex-col justify-end overflow-hidden rounded-xl bg-ink transition-all",
           "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring",
           dragging
             ? "ring-2 ring-primary scale-[1.01]"
@@ -122,7 +122,7 @@ export function Letterbox({
         <Badge
           variant="outline"
           aria-hidden
-          className="absolute end-3 top-3 border-paper/25 bg-ink/40 font-mono text-[0.625rem] tracking-[0.18em] text-paper/70 uppercase backdrop-blur-sm"
+          className="absolute end-3 top-3 border-paper/25 bg-ink/40 font-mono text-micro tracking-[0.18em] text-paper/70 uppercase backdrop-blur-sm"
         >
           {file ? <FilmIcon data-icon="inline-start" /> : null}
           {file ? "source" : "no source"}
@@ -145,11 +145,11 @@ export function Letterbox({
           // Two lines on purpose: the instruction reads as a sentence, the
           // formats as a spec. One line wraps and drops the icon mid-phrase.
           <span className="relative z-10 flex flex-col items-center gap-1 px-6 pb-4 text-center font-mono tracking-wide">
-            <span className="flex items-center gap-1.5 text-[0.6875rem] text-paper/65">
+            <span className="flex items-center gap-1.5 text-meta text-paper/65">
               <UploadCloudIcon className="size-3.5" aria-hidden />
               drag it in, or click to browse
             </span>
-            <span className="text-[0.625rem] text-paper/40">
+            <span className="text-micro text-paper/40">
               mp4 · mov · mkv · mp3 · wav
             </span>
           </span>
@@ -175,7 +175,7 @@ export function Letterbox({
               <TooltipTrigger asChild>
                 <Badge
                   variant="outline"
-                  className="max-w-[22ch] font-mono text-[0.6875rem]"
+                  className="max-w-[22ch] font-mono text-meta"
                 >
                   <span className="truncate" dir="auto">
                     {file.name}
@@ -187,7 +187,7 @@ export function Letterbox({
 
             <Badge
               variant="ghost"
-              className="font-mono text-[0.6875rem] text-muted-foreground"
+              className="font-mono text-meta text-muted-foreground"
             >
               <HardDriveIcon data-icon="inline-start" aria-hidden />
               {(file.size / 1024 / 1024).toFixed(1)} MB
@@ -197,7 +197,7 @@ export function Letterbox({
               <>
                 <Badge
                   variant="ghost"
-                  className="font-mono text-[0.6875rem] text-muted-foreground"
+                  className="font-mono text-meta text-muted-foreground"
                 >
                   <ClockIcon data-icon="inline-start" aria-hidden />
                   {formatDuration(upload.duration)}
@@ -206,7 +206,7 @@ export function Letterbox({
                     empty transcript, so it is the one chip that shouts. */}
                 <Badge
                   variant={upload.has_audio ? "ghost" : "destructive"}
-                  className="font-mono text-[0.6875rem]"
+                  className="font-mono text-meta"
                 >
                   {upload.has_audio ? (
                     <AudioLinesIcon data-icon="inline-start" aria-hidden />
@@ -221,7 +221,7 @@ export function Letterbox({
         ) : (
           <Badge
             variant="ghost"
-            className="font-mono text-[0.6875rem] text-muted-foreground"
+            className="font-mono text-meta text-muted-foreground"
           >
             awaiting a file
           </Badge>

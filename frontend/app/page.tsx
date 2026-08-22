@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   AlertCircleIcon,
+  ArrowUpRightIcon,
   PencilIcon,
   CaptionsIcon,
   LanguagesIcon,
@@ -53,11 +54,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ThemeToggle } from "./components/theme-toggle";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CHIP, SEGMENT } from "./lib/ui";
 import { Letterbox, type UploadInfo } from "./components/letterbox";
 import { TrackPanel, type Track } from "./components/tracks";
 import { Editor } from "./components/editor";
@@ -435,18 +438,30 @@ export default function Home() {
     // No ground colour here: body owns it, and an opaque wrapper would
     // paint straight over the backdrop.
     <div className="min-h-svh">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-6 py-6">
-          <div>
-            <h1 className="font-display text-3xl leading-none font-extrabold tracking-[-0.03em]">
+      {/*
+        A 72px bar that stays put: on a page this tall the run controls and the
+        status chip are the two things you need while scrolling a transcript,
+        and hunting back to the top for them is the whole reason a header goes
+        sticky. It is translucent rather than solid so the aurora keeps moving
+        underneath it instead of being cut off by an opaque band.
+      */}
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/75 backdrop-blur-xl backdrop-saturate-150">
+        <div className="container-page flex h-18 items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            {/* The one place the brand blue appears as a fill rather than as
+                a state: a mark, so the wordmark itself can stay plain type. */}
+            <span
+              aria-hidden
+              className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
+            >
+              <CaptionsIcon className="size-4" />
+            </span>
+            <span className="font-display text-wordmark font-semibold">
               Vida
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Subtitles in any language, with the timing intact.
-            </p>
+            </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {/* Run / Editor. Hidden until there is something to edit, so it
                 never offers a screen that would open empty. */}
             {editable.length > 0 && (
@@ -457,10 +472,10 @@ export default function Home() {
                 value={view}
                 onValueChange={(v) => v && setView(v as "run" | "editor")}
               >
-                <ToggleGroupItem value="run" className="glass-control">
+                <ToggleGroupItem value="run" className={SEGMENT}>
                   Run
                 </ToggleGroupItem>
-                <ToggleGroupItem value="editor" className="glass-control">
+                <ToggleGroupItem value="editor" className={SEGMENT}>
                   <PencilIcon data-icon="inline-start" aria-hidden />
                   Editor
                 </ToggleGroupItem>
@@ -477,16 +492,21 @@ export default function Home() {
                       ? "outline"
                       : "secondary"
                 }
+                className="h-7 min-w-0 px-3"
               >
                 {busy && <Spinner data-icon="inline-start" />}
-                {caption}
+                {/* "Translating → Portuguese" is longer than a phone header
+                    has room for, and the bar must not scroll sideways. */}
+                <span className="truncate">{caption}</span>
               </Badge>
             )}
+            {/* Which backend is being talked to is reference information, not
+                a control: first thing to go when the bar runs out of room. */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge
                   variant="ghost"
-                  className="font-mono text-[0.6875rem] text-muted-foreground"
+                  className="hidden h-7 px-3 font-mono text-meta text-muted-foreground md:inline-flex"
                 >
                   <ServerIcon data-icon="inline-start" aria-hidden />
                   {API_BASE.replace(/^https?:\/\//, "")}
@@ -497,13 +517,14 @@ export default function Home() {
                 it.
               </TooltipContent>
             </Tooltip>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
       {view === "editor" && editTrack ? (
-        <main id="main" className="mx-auto max-w-6xl px-6 py-8">
-          <h2 className="sr-only">Cue editor</h2>
+        <main id="main" className="container-page py-12 lg:py-16">
+          <h1 className="sr-only">Cue editor</h1>
           <Editor
             track={editTrack}
             cues={cuesFor(editTrack)}
@@ -531,11 +552,35 @@ export default function Home() {
           />
         </main>
       ) : (
+      <>
+      {/*
+        The page headline. One H1, set in the display step — tight tracking,
+        0.98 line-height — and held to a short measure so it breaks into two
+        or three dense lines rather than one thin ribbon across a wide
+        display. Left-aligned rather than centred: everything below it is a
+        working tool on a left edge, and a centred headline over a
+        left-aligned layout reads as a template.
+      */}
+      <section className="container-page pt-14 pb-10 lg:pt-20 lg:pb-14">
+        <p className="eyebrow text-muted-foreground">Subtitle pipeline</p>
+        <h1 className="mt-4 max-w-3xl font-display text-display font-semibold">
+          Subtitles in any language, with the timing intact.
+        </h1>
+        <p className="mt-5 max-w-2xl text-lead text-muted-foreground">
+          Drop in a video. Vida transcribes what is said, translates it into as
+          many languages as you pick, and hands back a subtitle track per
+          language — plus, if you want it, a description of what the video
+          shows.
+        </p>
+      </section>
+
       <main
         id="main"
-        className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[minmax(0,460px)_1fr] lg:items-start lg:gap-10"
+        className="container-page grid gap-10 pb-20 lg:grid-cols-[minmax(0,25rem)_1fr] lg:items-start lg:gap-16 lg:pb-28"
       >
-        <div className="glass rounded-xl p-6 lg:sticky lg:top-8">
+        {/* The only element on the page allowed the deep shadow: it is the
+            control surface, and depth here is hierarchy rather than style. */}
+        <div className="glass glass-panel rounded-2xl p-6 lg:sticky lg:top-24 lg:p-7">
           <h2 className="sr-only">Job setup</h2>
 
           <FieldGroup>
@@ -556,7 +601,7 @@ export default function Home() {
             <FieldSet>
               <FieldLegend
                 variant="label"
-                className="font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase"
+                className="eyebrow text-muted-foreground"
               >
                 Output
               </FieldLegend>
@@ -669,7 +714,7 @@ export default function Home() {
               <div className="flex items-center justify-between gap-2">
                 <FieldLegend
                   variant="label"
-                  className="flex items-center gap-2 font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase"
+                  className="eyebrow flex items-center gap-2 text-muted-foreground"
                 >
                   <LanguagesIcon className="size-3.5" aria-hidden />
                   Translate into
@@ -701,10 +746,7 @@ export default function Home() {
                     key={language}
                     value={language}
                     aria-label={`Translate into ${language}`}
-                    // The stock "on" state is bg-muted, which is almost
-                    // invisible on this ground. A picked language is a
-                    // commitment to a whole track, so it gets the accent.
-                    className="glass-control border-white/8 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-primary data-[state=on]:hover:bg-primary/25 data-[state=on]:hover:text-primary"
+                    className={CHIP}
                   >
                     {language}
                   </ToggleGroupItem>
@@ -773,11 +815,11 @@ export default function Home() {
           </ViewTransition>
         ) : (
           <ViewTransition key="skeleton" default="none" exit="slide-down">
-            <Card className="glass flex min-h-[28rem] flex-col gap-0 overflow-hidden p-0 lg:min-h-[34rem]">
+            <Card className="glass rounded-2xl flex min-h-[28rem] flex-col gap-0 overflow-hidden p-0 lg:min-h-[34rem]">
               <div className="px-4 py-2">
                 <Badge
                   variant="ghost"
-                  className="font-mono text-[0.6875rem] text-muted-foreground"
+                  className="font-mono text-meta text-muted-foreground"
                 >
                   no cues
                 </Badge>
@@ -792,7 +834,7 @@ export default function Home() {
                     key={row}
                     className="grid grid-cols-[2.5rem_9rem_1fr] items-center gap-x-3 border-b px-4 py-2.5"
                   >
-                    <span className="font-mono text-[0.6875rem] tabular-nums text-muted-foreground/30">
+                    <span className="font-mono text-meta tabular-nums text-muted-foreground/30">
                       {row.toString().padStart(2, "0")}
                     </span>
                     <Skeleton className="h-2 w-20" />
@@ -820,19 +862,41 @@ export default function Home() {
           </ViewTransition>
         )}
       </main>
+      </>
       )}
 
-      <footer className="mx-auto max-w-6xl px-6 pt-2 pb-10">
-        <p className="wrap-anywhere font-mono text-[0.6875rem] text-muted-foreground">
-          Powered by{" "}
-          <a
-            href="https://pypi.org/project/vida-sdk/"
-            className="underline-offset-4 hover:text-primary hover:underline"
-          >
-            vida-sdk
-          </a>
-          . Files are processed on your own server.
-        </p>
+      <footer className="border-t">
+        <div className="container-page flex flex-col gap-8 py-12 sm:flex-row sm:items-start sm:justify-between">
+          <div className="max-w-sm">
+            <p className="font-display text-wordmark font-semibold">Vida</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              A transcription, translation, and video-analysis pipeline you run
+              on your own machine.
+            </p>
+          </div>
+
+          <div className="grid gap-8 sm:grid-cols-2 sm:gap-16">
+            <div>
+              <p className="eyebrow text-muted-foreground">Built on</p>
+              <a
+                href="https://pypi.org/project/vida-sdk/"
+                className="arrow-link mt-3 inline-flex items-center gap-1.5 text-sm font-medium hover:text-primary"
+              >
+                vida-sdk on PyPI
+                <ArrowUpRightIcon className="size-4" aria-hidden />
+              </a>
+            </div>
+            <div>
+              <p className="eyebrow text-muted-foreground">Where it runs</p>
+              <p className="mt-3 wrap-anywhere font-mono text-meta text-muted-foreground">
+                {API_BASE.replace(/^https?:\/\//, "")}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Files are processed on your own server.
+              </p>
+            </div>
+          </div>
+        </div>
       </footer>
     </div>
   );

@@ -35,16 +35,21 @@ export type Track = {
   emptyMessage: string;
 };
 
-// Four bands of the prism, spread as far apart in hue as the source allows
-// (36° / 168° / 210° / 340°) so two tracks are never confusable at a glance.
+// One colour per track, ordered so that *adjacent* tracks are furthest apart
+// in hue (226° → 174° → 330° → 193°) rather than merely distinct as a set:
+// tabs are read left to right, so neighbours are what get confused. The brand
+// blue leads because the source transcript is always track one.
+//
+// `--blue` is deliberately not in here. It sits a few degrees off `--caption`,
+// which is fine for a chart and useless for a tab strip.
 const TONES = [
   "text-caption",
   "text-teal",
-  "text-blue",
   "text-magenta",
+  "text-cyan",
 ] as const;
 
-/** Prism-palette colour per subtitle track; the analysis stays neutral. */
+/** Accent colour per subtitle track; the analysis stays neutral. */
 export function toneFor(track: Track, index: number): string {
   return track.kind === "analysis"
     ? "text-foreground"
@@ -72,7 +77,7 @@ export function TrackPanel({ tracks, activeId, onSelect, onDownload }: Props) {
       // Glass, not a slab: the backdrop's light bleeds through so the
       // panel sits *in* the room rather than on top of it. The blur
       // flattens whatever is behind, so cue text keeps full contrast.
-      className="glass flex min-h-[28rem] flex-col gap-0 overflow-hidden p-0 lg:min-h-[34rem]"
+      className="glass rounded-2xl flex min-h-[28rem] flex-col gap-0 overflow-hidden p-0 lg:min-h-[34rem]"
     >
       <h2 id="tracks-heading" className="sr-only">
         Output tracks
@@ -166,12 +171,12 @@ function TrackBody({
     return (
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-6 py-6">
-          <p className="mb-3 flex items-center gap-2 font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase">
+          <p className="mb-3 flex items-center gap-2 font-mono text-meta tracking-[0.18em] text-muted-foreground uppercase">
             <EyeIcon className="size-3.5" aria-hidden />
             What the video shows
           </p>
           {track.text ? (
-            <p className="wrap-anywhere max-w-[68ch] text-[0.9375rem] leading-7 whitespace-pre-wrap text-foreground/90">
+            <p className="wrap-anywhere max-w-[68ch] text-body leading-7 whitespace-pre-wrap text-foreground/90">
               {track.text}
             </p>
           ) : (
@@ -195,7 +200,7 @@ function TrackBody({
   return (
     <>
       <div className="flex items-center justify-between gap-2 px-4 py-2">
-        <Badge variant="ghost" className="font-mono text-[0.6875rem]">
+        <Badge variant="ghost" className="font-mono text-meta">
           {cues.length > 0 ? `${cues.length} cues` : "no cues"}
         </Badge>
         {track.srt && cues.length > 0 && (
@@ -215,12 +220,12 @@ function TrackBody({
                 key={cue.index}
                 className="grid grid-cols-[2.5rem_1fr] items-baseline gap-x-3 border-b px-4 py-2.5 transition-colors last:border-b-0 hover:bg-muted/40 sm:grid-cols-[2.5rem_9rem_1fr]"
               >
-                <span className="font-mono text-[0.6875rem] tabular-nums text-muted-foreground">
+                <span className="font-mono text-meta tabular-nums text-muted-foreground">
                   {cue.index.toString().padStart(2, "0")}
                 </span>
                 <span
                   className={cn(
-                    "font-mono text-[0.6875rem] tabular-nums",
+                    "font-mono text-meta tabular-nums",
                     tone,
                   )}
                 >
@@ -235,7 +240,7 @@ function TrackBody({
                 <span
                   lang={track.lang}
                   dir="auto"
-                  className="wrap-anywhere col-span-2 text-[0.9375rem] leading-6 text-foreground/90 sm:col-span-1"
+                  className="wrap-anywhere col-span-2 text-body leading-6 text-foreground/90 sm:col-span-1"
                 >
                   {cue.text}
                 </span>
@@ -247,7 +252,7 @@ function TrackBody({
           <p
             lang={track.lang}
             dir="auto"
-            className="wrap-anywhere px-4 py-4 text-[0.9375rem] leading-7 whitespace-pre-wrap text-foreground/90"
+            className="wrap-anywhere px-4 py-4 text-body leading-7 whitespace-pre-wrap text-foreground/90"
           >
             {track.text}
           </p>

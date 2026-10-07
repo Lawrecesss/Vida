@@ -37,7 +37,15 @@ python -m evals.asr.run score && python -m evals.asr.run report
 
 Fixture media is gitignored (copyrighted clips); the `.reference.srt` files are committed. A fixture whose media is absent is skipped, so this runs on a fresh clone and reports nothing.
 
-Demo app:
+Demo app — two services, two images, wired by `compose.yaml` at the root:
+
+```bash
+make up                                      # :3000 and :8000, built images
+make dev                                     # same, bind-mounted, both hot-reload
+make down                                    # make clean also drops the uploads volume
+```
+
+Or natively:
 
 ```bash
 uv pip install -r backend/requirements.txt   # installs the SDK editable from ../
@@ -88,6 +96,8 @@ Filter order in `vida/media/audio.py:_filter_graph()` is load-bearing in the sam
 `backend/api/deps.py` holds one process-wide `Vida` so connections pool across requests. Client-supplied `video_path` values are always run through `resolve_upload()`, which confines them to `UPLOAD_DIR` — do not read a request-supplied path directly. `/process/stream` and `/chat/stream` are SSE; errors are emitted as events rather than raised, so the stream reports instead of 500-ing.
 
 The frontend targets `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000/api/v1`. CORS defaults to `http://localhost:3000`, never `*`.
+
+The backend image builds from the **repo root**, because `requirements.txt` installs the SDK with `-e ../` and so needs `vida/` in the context; the frontend builds from its own directory. The backend runs one uvicorn worker on purpose — `deps.py` and `agent_state.py` hold process-wide singletons, so a second worker is a second connection pool, not more throughput. `NEXT_PUBLIC_API_URL` is baked into the client bundle at build time and must name a host-reachable URL, never the `backend` service name.
 
 ### Frontend
 

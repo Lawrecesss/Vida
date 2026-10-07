@@ -330,7 +330,21 @@ async with VidaAgent() as agent:
 ## The demo app
 
 `backend/` is a FastAPI service that wraps the SDK, and `frontend/` is a Next.js
-UI for it.
+UI for it. They are separate services with separate images — the SDK is not one
+of them, it is a library compiled into the backend.
+
+```bash
+make up      # both services, http://localhost:3000 and :8000
+make dev     # same, with hot reload on both
+make down
+```
+
+Keys are read from `.env` or `.env.secret` at the repo root; both are optional,
+and the stack starts without them (`/backends` will just report nothing ready).
+Uploaded media lives on a named volume, so it survives a restart — `make clean`
+is what deletes it.
+
+Or run them directly, without Docker:
 
 ```bash
 uv venv && uv pip install -r backend/requirements.txt

@@ -8,6 +8,12 @@ here talks to ffmpeg or a model provider directly.
 ## Run it
 
 ```bash
+make up      # from the repo root: this service plus the frontend
+```
+
+Or natively:
+
+```bash
 uv venv
 uv pip install -r requirements.txt   # installs vida-sdk editable from ../
 uv run python run.py                 # http://localhost:8000
@@ -22,6 +28,26 @@ manual restart.
 Needs the same environment as the SDK (`GROQ_API_KEY`, `OPENROUTER_API_KEY`,
 ...) — see the root `.env.example`. A `.env` or `.env.secret` found upward
 from the working directory is loaded automatically.
+
+## In Docker
+
+`Dockerfile` builds from the **repo root**, not from here: `requirements.txt`
+installs the SDK with `-e ../`, so `vida/` and `pyproject.toml` have to be in
+the build context. `docker build backend/` cannot work; `compose.yaml` at the
+root sets `context: .` for this reason.
+
+The image installs a system **ffmpeg**, which also gets you `ffprobe` — the
+`imageio-ffmpeg` fallback the SDK carries ships no ffprobe, which would push
+every probe onto the slower `ffmpeg -i` stderr parse in `vida/media/ffmpeg.py`.
+
+It runs **one uvicorn worker on purpose.** `api/deps.py` and `api/agent_state.py`
+both hold process-wide singletons — the pooled `Vida` client and the LangGraph
+agent — so a second worker means a second pool and a second agent rather than
+more throughput. Scaling this service out needs that state moved first.
+
+Uploads go to `/data/uploads` on a named volume rather than the default
+`/tmp/vida_uploads`: a client calls `/upload`, then hands the returned path back
+to `/process`, so the file has to outlive anything that happens between the two.
 
 ## Architecture
 

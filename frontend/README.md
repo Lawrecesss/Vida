@@ -8,6 +8,12 @@ cue.
 ## Run it
 
 ```bash
+make up      # from the repo root: this service plus the backend
+```
+
+Or natively:
+
+```bash
 npm install
 npm run dev      # http://localhost:3000
 ```
@@ -20,6 +26,24 @@ there's nothing here to fall back to without it.
 npm run build     # production build
 npm run lint      # eslint
 ```
+
+## In Docker
+
+`Dockerfile` builds from this directory — the UI shares nothing with the SDK but
+the HTTP contract, which is the point of keeping them separate services.
+
+`NEXT_PUBLIC_API_URL` is **inlined into the client bundle at build time**, not
+read at runtime: every page here is `"use client"`, so the fetches run in the
+browser. It therefore has to name a URL the *browser* can reach — the published
+host port — never the `backend` Compose service name, which resolves only inside
+the Docker network. Changing it means a rebuild, not a restart:
+
+```bash
+NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 make up
+```
+
+`next.config.ts` sets `output: "standalone"` so the runtime stage ships the
+traced server and no `node_modules`. It is inert outside Docker.
 
 ## Stack
 

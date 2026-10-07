@@ -19,14 +19,14 @@ uv pip install -r requirements.txt   # installs vida-sdk editable from ../
 uv run python run.py                 # http://localhost:8000
 ```
 
-`requirements.txt` installs the SDK with `-e ../[groq,agent]`, so backend
+`requirements.txt` installs the SDK with `-e ../[agent]`, so backend
 changes and SDK changes stay in sync without a reinstall. `run.py` also adds
 `../vida` to uvicorn's reload watch list — the default only watches the
 working directory, which would otherwise leave SDK edits invisible until a
 manual restart.
 
-Needs the same environment as the SDK (`GROQ_API_KEY`, `OPENROUTER_API_KEY`,
-...) — see the root `.env.example`. A `.env` or `.env.secret` found upward
+Needs the same environment as the SDK (`OPENROUTER_API_KEY`, ...) — see the
+root `.env.example`. A `.env` or `.env.secret` found upward
 from the working directory is loaded automatically.
 
 ## In Docker
@@ -59,6 +59,17 @@ closed in `api/app.py`'s lifespan handler on shutdown.
 handlers that call the SDK, done. Nothing above it re-implements pipeline
 logic — if a change looks like it belongs in `vida/`, it does.
 
+Model ids come in the request body, not from this service's environment. Every
+operation takes optional `asr_model`, `translation_model`, `analysis_model` and
+`synthesis_model` fields and hands them to the SDK, which passes them to the
+provider untouched; omitting one falls back to the server's configured default.
+That is why one shared `Vida` is enough for clients that want different models:
+the choice is per call, so nothing here is pinned to a model and no redeploy is
+needed to offer one that shipped yesterday. `GET /backends` reports the defaults
+in force, which is the one thing a client cannot derive from an id it chose
+itself. Nothing validates these strings against an allowlist — an unknown model
+surfaces as the provider's own 404 through the usual `502`.
+
 Client-supplied `video_path` values are never trusted directly. Every request
 that carries one is routed through `resolve_upload()`, which resolves the
 path and checks it against `UPLOAD_DIR` — that's what stops a request from
@@ -85,7 +96,7 @@ All under `/api/v1`, plus `/health` at the root.
 | `POST` | `/subtitles` | Straight to `.srt`/`.vtt` text |
 | `POST` | `/chat` | One-shot message to the optional LangGraph agent |
 | `POST` | `/chat/stream` | Same, streamed |
-| `GET` | `/backends` | Which ASR/LLM backends are currently usable (i.e. which keys are set) |
+| `GET` | `/backends` | Which ASR backends are usable (i.e. which keys are set), the default model each resolves to, and the LLM defaults in force |
 
 Upload is capped at `VIDA_MAX_UPLOAD_MB` (default 1024) and written to disk in
 chunks — a whole video is never buffered in memory.

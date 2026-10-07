@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import os
 import shutil
 import tempfile
@@ -14,7 +15,7 @@ from typing import Literal, overload
 from vida.analyze.core import analyze_video
 from vida.asr import Transcriber, get_transcriber
 from vida.asr.pipeline import extract_audio_for, transcribe_audio_file
-from vida.config import ASRBackend, VidaConfig
+from vida.config import AnalysisConfig, ASRBackend, TranslationConfig, VidaConfig
 from vida.errors import MediaError
 from vida.llm import OpenRouterClient
 from vida.media.video import probe
@@ -41,6 +42,15 @@ class Vida:
 
         vida = Vida()
         transcript = vida.transcribe_sync("talk.mp4")
+
+    No stage is pinned to a model. Each takes a per-call ``model`` that
+    overrides the configured one for that call only::
+
+        await vida.transcribe("talk.mp4", model="openai/whisper-large-v3-turbo")
+        await vida.translate(transcript, "Japanese", model="qwen/qwen3-max")
+
+    That is the layer a server works at: one pooled client for the process,
+    the model chosen per request from whatever the request itself carries.
     """
 
     def __init__(
@@ -63,6 +73,9 @@ class Vida:
             self.config.asr.model = asr_model
         if openrouter_api_key is not None:
             self.config.openrouter_api_key = openrouter_api_key
+            # The hosted ASR backend is built from the nested ASR config alone,
+            # so it needs its own copy of the key.
+            self.config.asr.openrouter_api_key = openrouter_api_key
         if translation_model is not None:
             self.config.translation.model = translation_model
         if work_dir is not None:
@@ -112,6 +125,7 @@ class Vida:
         language: str | None = None,
         prompt: str | None = None,
         glossary: Iterable[str] | None = None,
+        model: str | None = None,
     ) -> Transcript:
         """Transcribe the speech in a video or audio file.
 
@@ -123,6 +137,9 @@ class Vida:
                 vocabulary, product names. Extends
                 :attr:`~vida.config.ASRConfig.glossary` rather than replacing
                 it, and is folded into the prompt the model actually accepts.
+            model: ASR model id for this call only, e.g.
+                ``"openai/whisper-large-v3-turbo"``. Must be one the active
+                backend understands; it is passed through untouched.
 
         Returns:
             A timestamped :class:`~vida.types.Transcript`. Call
@@ -139,6 +156,7 @@ class Vida:
                 language=language,
                 prompt=prompt,
                 glossary=list(glossary) if glossary else None,
+                model=model,
                 work_dir=work_dir,
                 source=source,
                 # Detect from the untouched media: the cleanup that helps the
@@ -147,13 +165,17 @@ class Vida:
             )
 
     @overload
-    async def translate(self, content: Transcript, target_language: str) -> Transcript: ...
+    async def translate(
+        self, content: Transcript, target_language: str, *, model: str | None = ...
+    ) -> Transcript: ...
 
     @overload
-    async def translate(self, content: str, target_language: str) -> str: ...
+    async def translate(
+        self, content: str, target_language: str, *, model: str | None = ...
+    ) -> str: ...
 
     async def translate(
-        self, content: Transcript | str, target_language: str
+        self, content: Transcript | str, target_language: str, *, model: str | None = None
     ) -> Transcript | str:
         """Translate a transcript or a block of text.
 
@@ -163,17 +185,25 @@ class Vida:
         Args:
             content: A :class:`~vida.types.Transcript` or plain string.
             target_language: Language name or code, e.g. ``"Japanese"`` or ``"ja"``.
+            model: OpenRouter model id for this call only. Any model that
+                honours the ``<s id="N">`` markers will do — see
+                :mod:`vida.translate.core` for why that is the requirement.
         """
+        config = self._translation_config(model)
         if isinstance(content, Transcript):
             return await translate_transcript(
-                content, target_language, client=self.llm, config=self.config.translation
+                content, target_language, client=self.llm, config=config
             )
         return await translate_text(
-            content, target_language, client=self.llm, config=self.config.translation
+            content, target_language, client=self.llm, config=config
         )
 
     async def translate_all(
-        self, transcript: Transcript, target_languages: Iterable[str]
+        self,
+        transcript: Transcript,
+        target_languages: Iterable[str],
+        *,
+        model: str | None = None,
     ) -> dict[str, Transcript]:
         """Translate one transcript into several languages at once.
 
@@ -184,7 +214,7 @@ class Vida:
         if not languages:
             return {}
         results = await asyncio.gather(
-            *(self.translate(transcript, language) for language in languages)
+            *(self.translate(transcript, language, model=model) for language in languages)
         )
         return dict(zip(languages, results, strict=True))
 
@@ -194,6 +224,8 @@ class Vida:
         *,
         query: str | None = None,
         transcript: Transcript | None = None,
+        model: str | None = None,
+        synthesis_model: str | None = None,
     ) -> Analysis:
         """Analyze what a video *shows*, as opposed to what is said in it.
 
@@ -202,13 +234,17 @@ class Vida:
             query: An optional question to focus the analysis on.
             transcript: Supplying one grounds the visual descriptions in what is
                 actually being said, which measurably improves them.
+            model: Vision model id for the clip-wise pass, this call only.
+            synthesis_model: Model id for the pass that writes the summary.
+                Separate because the two jobs are not alike: the first needs to
+                see, the second only to read.
         """
         media = probe(source)
         with self._work_dir() as work_dir:
             return await analyze_video(
                 media,
                 client=self.llm,
-                config=self.config.analysis,
+                config=self._analysis_config(model, synthesis_model),
                 user_query=query,
                 transcript=transcript,
                 work_dir=work_dir,
@@ -225,6 +261,10 @@ class Vida:
         language: str | None = None,
         prompt: str | None = None,
         glossary: Iterable[str] | None = None,
+        asr_model: str | None = None,
+        translation_model: str | None = None,
+        analysis_model: str | None = None,
+        synthesis_model: str | None = None,
     ) -> VideoInsight:
         """Run the whole pipeline over one video in a single call.
 
@@ -240,6 +280,10 @@ class Vida:
             language: Source-language hint for ASR.
             prompt: Vocabulary hint for ASR.
             glossary: Terms to bias ASR decoding toward.
+            asr_model: Model id for transcription, this call only.
+            translation_model: Model id for translation, this call only.
+            analysis_model: Vision model id for the clip-wise pass.
+            synthesis_model: Model id for the analysis summary pass.
 
         Returns:
             A :class:`~vida.types.VideoInsight` holding everything produced,
@@ -269,6 +313,7 @@ class Vida:
                     language=language,
                     prompt=prompt,
                     glossary=list(glossary) if glossary else None,
+                    model=asr_model,
                     work_dir=work_dir,
                     source=source,
                 )
@@ -285,7 +330,7 @@ class Vida:
                 result = await analyze_video(
                     media,
                     client=self.llm,
-                    config=self.config.analysis,
+                    config=self._analysis_config(analysis_model, synthesis_model),
                     user_query=query,
                     transcript=None,
                     work_dir=work_dir,
@@ -300,7 +345,9 @@ class Vida:
             translations: dict[str, Transcript] = {}
             if targets and transcript is not None:
                 started = time.perf_counter()
-                translations = await self.translate_all(transcript, targets)
+                translations = await self.translate_all(
+                    transcript, targets, model=translation_model
+                )
                 timings["translate"] = time.perf_counter() - started
 
         return VideoInsight(
@@ -321,6 +368,8 @@ class Vida:
         language: str | None = None,
         prompt: str | None = None,
         glossary: Iterable[str] | None = None,
+        asr_model: str | None = None,
+        translation_model: str | None = None,
     ) -> dict[str, str]:
         """Transcribe, translate, and write subtitle files in one call.
 
@@ -333,6 +382,8 @@ class Vida:
             language: Source-language hint for ASR.
             prompt: Vocabulary hint for ASR.
             glossary: Terms to bias ASR decoding toward.
+            asr_model: Model id for transcription, this call only.
+            translation_model: Model id for translation, this call only.
 
         Returns:
             A mapping of language code to the subtitle file written.
@@ -344,6 +395,8 @@ class Vida:
             language=language,
             prompt=prompt,
             glossary=glossary,
+            asr_model=asr_model,
+            translation_model=translation_model,
         )
         out_dir = out_dir or os.path.dirname(os.path.abspath(source))
         stem = os.path.splitext(os.path.basename(source))[0]
@@ -406,6 +459,29 @@ class Vida:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _translation_config(self, model: str | None) -> TranslationConfig:
+        """The translation config, with ``model`` swapped in for one call.
+
+        A copy rather than a mutation: ``Vida`` is shared across concurrent
+        requests in a server, and reaching into ``self.config`` to set a model
+        would leak one request's choice into whatever else is in flight.
+        """
+        if not model:
+            return self.config.translation
+        return dataclasses.replace(self.config.translation, model=model)
+
+    def _analysis_config(
+        self, model: str | None, synthesis_model: str | None
+    ) -> AnalysisConfig:
+        """The analysis config, with either model swapped in for one call."""
+        if not model and not synthesis_model:
+            return self.config.analysis
+        return dataclasses.replace(
+            self.config.analysis,
+            model=model or self.config.analysis.model,
+            synthesis_model=synthesis_model or self.config.analysis.synthesis_model,
+        )
 
     async def _audio_for(self, media: MediaInfo, work_dir: str) -> str:
         """Path to transcribable audio for ``media``, extracting it if needed."""

@@ -26,11 +26,21 @@ class Transcriber(abc.ABC):
     @property
     @abc.abstractmethod
     def default_model(self) -> str:
-        """Model id used when the caller didn't pick one."""
+        """Model id used when neither the caller nor the config picked one."""
 
     @property
     def model(self) -> str:
         return self.config.model or self.default_model
+
+    def model_for(self, model: str | None) -> str:
+        """Resolve the model one call should use.
+
+        Three layers, narrowest first: the per-call argument, the configured
+        model, the backend default. The per-call layer is what lets a server
+        hand the model id down from its own request payload without holding a
+        separate client per model.
+        """
+        return model or self.model
 
     @abc.abstractmethod
     async def transcribe_file(
@@ -39,6 +49,7 @@ class Transcriber(abc.ABC):
         *,
         language: str | None = None,
         prompt: str | None = None,
+        model: str | None = None,
     ) -> Transcript:
         """Transcribe one audio file.
 
@@ -47,6 +58,8 @@ class Transcriber(abc.ABC):
             language: ISO-639-1 hint (e.g. ``"en"``). ``None`` auto-detects,
                 which costs a little latency but handles unknown input.
             prompt: Optional context to bias decoding (names, jargon).
+            model: Model id for this call only; ``None`` uses
+                :attr:`model`.
 
         Returns:
             A transcript whose segment timestamps are relative to this file.

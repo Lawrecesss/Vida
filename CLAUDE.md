@@ -31,7 +31,7 @@ Accuracy work is measured, not guessed at:
 
 ```bash
 uv pip install -e '.[eval]'                  # adds jiwer
-python -m evals.asr.run run --configs groq:whisper-large-v3,local:medium
+python -m evals.asr.run run --configs openrouter:openai/whisper-large-v3,local:medium
 python -m evals.asr.run score && python -m evals.asr.run report
 ```
 
@@ -60,9 +60,11 @@ Release is tag-driven (`v*` → `.github/workflows/publish.yml`): lint + test on
 
 `Vida` (`vida/client.py`) is the only public entry point. It holds a `VidaConfig`, lazily builds two collaborators — a `Transcriber` and an `OpenRouterClient` — and delegates. It owns scratch directories and HTTP lifetime; the stage modules own the logic and take everything they need as arguments.
 
+OpenRouter is the one hosted provider, for transcription as much as translation and analysis: `vida/llm.py` holds both `complete()` and `transcribe()` over a shared `_post()`, so one key, one retry policy and one connection pool serve every stage. The `openai` and `local` backends remain as alternatives and are the only ones needing an extra installed.
+
 Stage modules, all independent of each other:
 
-- `vida/asr/` — backends (`groq`, `openai`, `local`) behind `Transcriber`, plus `pipeline.py`, which is where the real work is.
+- `vida/asr/` — backends (`openrouter`, `openai`, `local`) behind `Transcriber`, plus `pipeline.py`, which is where the real work is. `whisper_response.py` normalises the `verbose_json` shape all three answer in.
 - `vida/translate/core.py` — batched, concurrent LLM translation.
 - `vida/analyze/core.py` — clip-wise visual analysis, then a synthesis pass.
 - `vida/media/` — all ffmpeg. Nothing above this layer shells out.
@@ -74,6 +76,8 @@ Everything crosses module boundaries as the pydantic models in `vida/types.py` (
 ### The invariants worth knowing before editing
 
 **Segment timestamps are global.** A `Transcriber` only ever sees one already-chunked audio file whose timeline starts at zero (`vida/asr/base.py`). Splitting, timestamp shifting, and de-overlapping at seams are `pipeline.merge_chunk_transcripts`' job. Do not push timeline awareness down into a backend.
+
+**No stage is pinned to a model.** A model id is a string that reaches the provider untouched — nothing validates it against an allowlist, because the point is that a model published after a release works without one. It resolves in three layers, narrowest first: the per-call `model=` argument, the config field, the backend default (`Transcriber.model_for`). The per-call layer is load-bearing for servers: `backend/` holds one process-wide `Vida` and takes model ids from each request body, so a per-call override must never mutate shared config — `Vida._translation_config`/`_analysis_config` return a `dataclasses.replace` copy for exactly that reason, and ASR threads `model` down through `transcribe_audio_file` rather than reassigning `config.model`. Whatever model is chosen applies to the language probe and every chunk of one file; mixing models within a file makes the output meaningless.
 
 **Segment ids survive translation.** `translate/core.py` sends segments as `<s id="N">…</s>` and reattaches results by id — that is the entire reason a translated transcript is still a valid subtitle track. Any change to the prompt or the parser must preserve the round trip, and any new default translation model must be verified to honour the markers (that's what the live smoke test checks).
 
@@ -87,13 +91,17 @@ Filter order in `vida/media/audio.py:_filter_graph()` is load-bearing in the sam
 
 **A vocabulary prompt is assembled once, in the pipeline.** `transcribe_audio_file()` is the single choke point both the single- and multi-chunk paths funnel through, so `vida/asr/glossary.py:build_prompt()` is called there rather than per backend or per chunk. Every chunk gets the same prompt — each is an independent request with no memory of the last.
 
+On OpenRouter that prompt is not a request field. It is a *provider* option (`provider.options.<slug>.prompt`), with no provider-neutral spelling, so `vida/asr/openrouter_backend.py` sends it under the slugs in `PROMPT_PROVIDERS` and `ASRConfig.provider_options` lets a caller name another. A provider that does not accept one ignores it silently — which is the one way a glossary can have no effect, and worth checking before concluding `build_prompt` is at fault.
+
+**The hosted response is richer than the documented one, and the code may not assume it.** OpenRouter documents `language`, `duration` and `segments` as provider-dependent and does not list `avg_logprob` or `no_speech_prob` at all. Measured against `openai/whisper-large-v3` they do arrive, which is what keeps `vida/asr/silence.py` working — but every read in `whisper_response.py` tolerates absence, and `is_silence` keeps a segment whose no-speech probability was never reported. That failure direction is deliberate: dropping real speech on missing evidence is worse than keeping a hallucination.
+
 **Accuracy knobs ship off.** Glossary biasing, `dialogue_filter`, and `silence_aware_chunking` all default to unset/`False`, and the default-path behaviour is byte-identical to what it was before they existed — `_filter_graph()` is tested for exactly that. None of them becomes a default until `evals/asr` shows a WER delta on real fixtures. The reason is history: this pipeline's tuning is calibrated against measured cases, and a plausible-sounding audio change that nobody measured is how you silently regress the thing.
 
-**Config is dataclasses with env-var defaults** (`vida/config.py`), loaded from `.env.secret` or `.env` found upward from the CWD. Every knob is settable three ways — constructor kwarg, config object, env var — and the README table plus `.env.example` are part of the contract; update both when adding one.
+**Config is dataclasses with env-var defaults** (`vida/config.py`). `ASRConfig` carries its own `openrouter_api_key` because a backend is built from an `ASRConfig` alone; `VidaConfig.__post_init__` keeps the two in step so setting either is enough, loaded from `.env.secret` or `.env` found upward from the CWD. Every knob is settable three ways — constructor kwarg, config object, env var — and the README table plus `.env.example` are part of the contract; update both when adding one.
 
 ### Demo backend
 
-`backend/api/deps.py` holds one process-wide `Vida` so connections pool across requests. Client-supplied `video_path` values are always run through `resolve_upload()`, which confines them to `UPLOAD_DIR` — do not read a request-supplied path directly. `/process/stream` and `/chat/stream` are SSE; errors are emitted as events rather than raised, so the stream reports instead of 500-ing.
+`backend/api/deps.py` holds one process-wide `Vida` so connections pool across requests. Model ids arrive in the request body — every operation takes optional `asr_model`, `translation_model`, `analysis_model`, `synthesis_model` and falls back to the server's defaults — which is why one shared client serves clients wanting different models. Client-supplied `video_path` values are always run through `resolve_upload()`, which confines them to `UPLOAD_DIR` — do not read a request-supplied path directly. `/process/stream` and `/chat/stream` are SSE; errors are emitted as events rather than raised, so the stream reports instead of 500-ing.
 
 The frontend targets `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000/api/v1`. CORS defaults to `http://localhost:3000`, never `*`.
 

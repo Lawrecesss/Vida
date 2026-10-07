@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from api.deps import MAX_UPLOAD_MB, UPLOAD_DIR, get_vida, resolve_upload, safe_upload_name
 from vida import Analysis, Transcript, VideoInsight, available_backends
+from vida.asr import BACKENDS
 from vida.errors import VidaError
 
 router = APIRouter()
@@ -32,19 +33,36 @@ class UploadResponse(BaseModel):
     has_audio: bool
 
 
+# Model ids travel in the request body rather than in this service's
+# environment. The SDK takes a model per call and never validates the string,
+# so a client can name any model the provider serves — including one published
+# after this service was deployed — and nothing here has to be redeployed or
+# restarted to offer it. Omitting a field falls back to the server's configured
+# default, which is what the UI does today.
+
 class TranscribeRequest(BaseModel):
     video_path: str
     language: str | None = Field(default=None, description="Source language hint, e.g. 'en'.")
     prompt: str | None = Field(default=None, description="Vocabulary hint for the ASR model.")
+    asr_model: str | None = Field(
+        default=None, description="ASR model id, e.g. 'openai/whisper-large-v3'."
+    )
 
 
 class TranslateRequest(TranscribeRequest):
     target_languages: list[str] = Field(min_length=1)
+    translation_model: str | None = Field(default=None, description="Model id for translation.")
 
 
 class AnalyzeRequest(BaseModel):
     video_path: str
     query: str | None = None
+    analysis_model: str | None = Field(
+        default=None, description="Vision model id for the clip-wise pass."
+    )
+    synthesis_model: str | None = Field(
+        default=None, description="Model id for the pass that writes the summary."
+    )
 
 
 class ProcessRequest(BaseModel):
@@ -54,6 +72,10 @@ class ProcessRequest(BaseModel):
     translate_to: list[str] = Field(default_factory=list)
     query: str | None = None
     language: str | None = None
+    asr_model: str | None = None
+    translation_model: str | None = None
+    analysis_model: str | None = None
+    synthesis_model: str | None = None
 
 
 class SubtitleRequest(BaseModel):
@@ -63,6 +85,8 @@ class SubtitleRequest(BaseModel):
         default=None, description="Omit to get subtitles in the source language."
     )
     format: Literal["srt", "vtt"] = "srt"
+    asr_model: str | None = None
+    translation_model: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -139,7 +163,10 @@ async def transcribe(request: TranscribeRequest) -> Transcript:
     path = resolve_upload(request.video_path)
     try:
         return await get_vida().transcribe(
-            path, language=request.language, prompt=request.prompt
+            path,
+            language=request.language,
+            prompt=request.prompt,
+            model=request.asr_model,
         )
     except VidaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -152,9 +179,14 @@ async def translate(request: TranslateRequest) -> dict[str, Transcript]:
     vida = get_vida()
     try:
         transcript = await vida.transcribe(
-            path, language=request.language, prompt=request.prompt
+            path,
+            language=request.language,
+            prompt=request.prompt,
+            model=request.asr_model,
         )
-        return await vida.translate_all(transcript, request.target_languages)
+        return await vida.translate_all(
+            transcript, request.target_languages, model=request.translation_model
+        )
     except VidaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -164,7 +196,12 @@ async def analyze(request: AnalyzeRequest) -> Analysis:
     """Analyze what the video visually shows."""
     path = resolve_upload(request.video_path)
     try:
-        return await get_vida().analyze(path, query=request.query)
+        return await get_vida().analyze(
+            path,
+            query=request.query,
+            model=request.analysis_model,
+            synthesis_model=request.synthesis_model,
+        )
     except VidaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -181,6 +218,10 @@ async def process(request: ProcessRequest) -> VideoInsight:
             analyze=request.analyze,
             query=request.query,
             language=request.language,
+            asr_model=request.asr_model,
+            translation_model=request.translation_model,
+            analysis_model=request.analysis_model,
+            synthesis_model=request.synthesis_model,
         )
     except VidaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -192,9 +233,13 @@ async def subtitles(request: SubtitleRequest) -> PlainTextResponse:
     path = resolve_upload(request.video_path)
     vida = get_vida()
     try:
-        transcript = await vida.transcribe(path, language=request.language)
+        transcript = await vida.transcribe(
+            path, language=request.language, model=request.asr_model
+        )
         if request.translate_to:
-            transcript = await vida.translate(transcript, request.translate_to)
+            transcript = await vida.translate(
+                transcript, request.translate_to, model=request.translation_model
+            )
     except VidaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -235,7 +280,9 @@ async def process_stream(request: ProcessRequest) -> StreamingResponse:
             transcript = None
             if request.transcribe or request.translate_to:
                 yield emit("status", stage="transcribing")
-                transcript = await vida.transcribe(path, language=request.language)
+                transcript = await vida.transcribe(
+                    path, language=request.language, model=request.asr_model
+                )
                 yield emit(
                     "transcript",
                     language=transcript.language,
@@ -254,7 +301,9 @@ async def process_stream(request: ProcessRequest) -> StreamingResponse:
 
             for language in request.translate_to:
                 yield emit("status", stage="translating", language=language)
-                translated = await vida.translate(transcript, language)
+                translated = await vida.translate(
+                    transcript, language, model=request.translation_model
+                )
                 yield emit(
                     "translation",
                     language=language,
@@ -264,7 +313,13 @@ async def process_stream(request: ProcessRequest) -> StreamingResponse:
 
             if request.analyze:
                 yield emit("status", stage="analyzing")
-                analysis = await vida.analyze(path, query=request.query, transcript=transcript)
+                analysis = await vida.analyze(
+                    path,
+                    query=request.query,
+                    transcript=transcript,
+                    model=request.analysis_model,
+                    synthesis_model=request.synthesis_model,
+                )
                 yield emit("analysis", summary=analysis.summary)
 
             yield "data: [DONE]\n\n"
@@ -330,11 +385,27 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
 @router.get("/backends")
 async def backends() -> dict:
-    """Which ASR backends this deployment can actually use."""
-    report = available_backends()
+    """Which ASR backends this deployment can use, and what each defaults to.
+
+    The default model is reported so a client knows what it gets by sending no
+    model at all — the one thing it cannot work out from a model id it chose
+    itself.
+    """
+    asr_config = get_vida().config.asr
+    report = available_backends(asr_config)
     return {
         "backends": [
-            {"name": name, "ready": not problem, "reason": problem or None}
+            {
+                "name": name,
+                "ready": not problem,
+                "reason": problem or None,
+                "default_model": BACKENDS[name](asr_config).model,
+            }
             for name, problem in report.items()
-        ]
+        ],
+        "models": {
+            "translation": get_vida().config.translation.model,
+            "analysis": get_vida().config.analysis.model,
+            "synthesis": get_vida().config.analysis.synthesis_model,
+        },
     }

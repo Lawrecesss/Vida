@@ -86,14 +86,16 @@ def whisper(monkeypatch):
 
 async def test_auto_prefers_the_gpu(whisper):
     whisper()
-    model = await LocalTranscriber(ASRConfig(backend="local"))._get_model()
+    transcriber = LocalTranscriber(ASRConfig(backend="local"))
+    model = await transcriber._get_model(transcriber.model)
     assert model.device == "cuda"
     assert model.compute_type == "float16"  # int8 would waste the hardware
 
 
 async def test_auto_falls_back_when_the_gpu_will_not_load(whisper):
     whisper(load_fails_on={"cuda"})
-    model = await LocalTranscriber(ASRConfig(backend="local"))._get_model()
+    transcriber = LocalTranscriber(ASRConfig(backend="local"))
+    model = await transcriber._get_model(transcriber.model)
     assert (model.device, model.compute_type) == ("cpu", "int8")
 
 
@@ -110,8 +112,8 @@ async def test_auto_falls_back_when_the_gpu_fails_mid_transcription(whisper):
 async def test_the_gpu_is_probed_only_once(whisper):
     whisper(load_fails_on={"cuda"})
     transcriber = LocalTranscriber(ASRConfig(backend="local"))
-    await transcriber._get_model()
-    await transcriber._get_model()
+    await transcriber._get_model(transcriber.model)
+    await transcriber._get_model(transcriber.model)
 
     assert [m.device for m in _FakeModel.instances] == ["cpu"]
 
@@ -128,5 +130,6 @@ async def test_an_explicit_gpu_choice_stays_fatal(whisper):
 async def test_an_explicit_compute_type_is_honoured(whisper):
     whisper()
     config = ASRConfig(backend="local", local_compute_type="int8_float16")
-    model = await LocalTranscriber(config)._get_model()
+    transcriber = LocalTranscriber(config)
+    model = await transcriber._get_model(transcriber.model)
     assert model.compute_type == "int8_float16"

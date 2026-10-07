@@ -26,8 +26,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# ASR backends
-groq = ["groq>=0.11"]
+# ASR backends. The default `openrouter` backend needs no extra: it is plain
+# HTTP over the httpx already in `dependencies`, against the same provider
+# translation and analysis use. These two are the alternatives.
 openai = ["openai>=1.40"]
 local = ["faster-whisper>=1.0"]
 # CUDA 12 runtime for the local backend's GPU path, for people who have an
@@ -39,7 +40,6 @@ cuda = ["nvidia-cublas-cu12>=12.3", "nvidia-cudnn-cu12>=9.0,<10"]
 agent = ["langgraph>=0.2", "langchain-core>=0.3", "langchain-openrouter>=0.2"]
 # Everything
 all = [
-    "groq>=0.11",
     "openai>=1.40",
     "faster-whisper>=1.0",
     "langgraph>=0.2",

@@ -34,17 +34,21 @@ parallel. Vida leans on that:
 ## Install
 
 ```bash
-pip install 'vida-sdk[groq]'      # fastest hosted transcription
-pip install 'vida-sdk[openai]'    # OpenAI Whisper
-pip install 'vida-sdk[local]'     # faster-whisper, fully offline
+pip install vida-sdk              # hosted transcription, translation, analysis
+pip install 'vida-sdk[openai]'    # also: talk to OpenAI Whisper directly
+pip install 'vida-sdk[local]'     # also: faster-whisper, fully offline
 pip install 'vida-sdk[all]'       # everything, including the chat agent
 ```
+
+The base install is all you need. Every hosted stage — transcription included —
+goes to OpenRouter over plain HTTP, so there is no vendor SDK to add and no
+extra to remember; the extras above are only for the alternative ASR backends.
 
 The distribution is `vida-sdk`; the import name is just `vida`.
 
 On Debian and Ubuntu, `pip install` into the system Python is blocked by PEP
-668. Use `uv tool install 'vida-sdk[groq]'` (or `pipx`) for the CLI, or install
-into a virtual environment.
+668. Use `uv tool install vida-sdk` (or `pipx`) for the CLI, or install into a
+virtual environment.
 
 ### Running the local backend on a GPU
 
@@ -68,9 +72,11 @@ dependency — so it works out of the box either way.
 ## Configure
 
 ```bash
-export GROQ_API_KEY=...         # transcription (recommended)
-export OPENROUTER_API_KEY=...   # translation and visual analysis
+export OPENROUTER_API_KEY=...   # transcription, translation, visual analysis
 ```
+
+One key for all three stages, and one bill. `OPENAI_API_KEY` is needed only for
+the `openai` ASR backend; the `local` one needs no key at all.
 
 Either a `.env` or a `.env.secret` file in the working directory is loaded
 automatically.
@@ -172,18 +178,56 @@ vida backends
 
 ## Choosing an ASR backend
 
-| Backend  | Speed | Cost | Notes |
-|----------|-------|------|-------|
-| `groq`   | fastest | cheap | `whisper-large-v3`; needs `GROQ_API_KEY` |
-| `openai` | fast | moderate | `whisper-1`; 25 MB per request, handled by chunking |
-| `local`  | slowest on CPU | free | `faster-whisper`; fully offline, downloads weights on first run |
+| Backend      | Speed | Cost | Notes |
+|--------------|-------|------|-------|
+| `openrouter` | fastest | cheap | default; `openai/whisper-large-v3`, needs only `OPENROUTER_API_KEY` |
+| `openai`     | fast | moderate | `whisper-1` straight from OpenAI; 25 MB per request, handled by chunking |
+| `local`      | slowest on CPU | free | `faster-whisper`; fully offline, downloads weights on first run |
 
-`Vida()` defaults to `auto`, which picks the fastest backend whose key is
-present. Force one explicitly:
+`Vida()` defaults to `auto`, which takes the first configured backend, preferring
+`openrouter` — the one key the rest of the SDK already needs. Force one
+explicitly:
 
 ```python
 vida = Vida(asr_backend="local", asr_model="medium")
 ```
+
+### Choosing a model per call
+
+No stage is pinned to a model. Each takes a `model` argument that overrides the
+configured one for that call only, and the id is passed to the provider
+untouched — so a model published after this release works without an upgrade:
+
+```python
+async with Vida() as vida:                       # one client, pooled connections
+    fast  = await vida.transcribe("a.mp4", model="openai/whisper-large-v3-turbo")
+    exact = await vida.transcribe("b.mp4", model="openai/whisper-large-v3")
+    ja    = await vida.translate(exact, "Japanese", model="qwen/qwen3-max")
+```
+
+`process()` and `subtitles()` take the same thing per stage — `asr_model`,
+`translation_model`, `analysis_model`, `synthesis_model`. This is the layer a
+server works at: hold one `Vida` for the process and let each request name its
+own models, rather than keeping a client per model or restarting to change one.
+The demo backend does exactly that — every endpoint accepts these as optional
+body fields and falls back to the server's defaults when they are absent.
+
+Two things differ between STT models, and Vida absorbs both rather than making
+you check first:
+
+- **Segment timestamps are not universal.** The Whisper models return them; the
+  newer token-priced models (`openai/gpt-4o-transcribe`) reject the request
+  outright. Vida asks for them, and on refusal retries for flat text and returns
+  a single cue spanning the audio — a poor subtitle track, but a transcript. The
+  answer is remembered per model id, so only the first chunk of a file pays for
+  finding out.
+- **Input size limits are per model.** A model may refuse a payload the Whisper
+  models accept. Lower `VIDA_ASR_CHUNK_SECONDS`; the pipeline already splits long
+  audio, so a smaller chunk is the whole fix.
+
+Nothing validates a model id against an allowlist — a wrong one surfaces as the
+provider's own error. Be aware OpenRouter reports whichever constraint it checks
+first, so a nonexistent id does not reliably say "does not exist".
 
 ### Getting the words right
 
@@ -241,6 +285,12 @@ vocabulary mechanism is the free-text prompt, so the terms are folded into it
 for you, with the glossary given priority over `prompt=` when the model's
 ~224-token prompt window binds.
 
+On the `openrouter` backend that prompt is a *provider* option rather than a
+request field — there is no provider-neutral spelling for it, so Vida sends it
+under the slugs documented to accept one. A provider that does not take a prompt
+ignores it silently, which is the one case where a glossary can have no effect;
+`VIDA_ASR_PROVIDER_OPTIONS` lets you name another slug to carry it.
+
 ### Longer-form and film-like material
 
 Three further knobs exist for it. All three default to off, because none of them
@@ -249,7 +299,7 @@ that would settle it:
 
 | Knob | What it does |
 |---|---|
-| `VIDA_ASR_MODEL=medium` (or `large-v3`) | On `local`, the default is `small`, picked for interactive latency. Batch work should trade that back for accuracy. |
+| `VIDA_ASR_MODEL=medium` (or `large-v3`) | On `local`, the default is `small`, picked for interactive latency. Batch work should trade that back for accuracy. On `openrouter` the equivalent is `openai/whisper-large-v3` over `...-turbo`. |
 | `VIDA_ASR_DIALOGUE_FILTER='pan=mono\|c0=FC'` | Keeps only the 5.1 centre channel, where film dialogue is mixed, discarding the score and effects bed. Needs a genuine 5.1 source; `pan=mono\|c0=0.5*c0+0.5*c1` is the weaker stereo equivalent. |
 | `VIDA_ASR_SILENCE_AWARE_CHUNKING=1` | Moves chunk boundaries into gaps between lines rather than cutting on the clock. |
 
@@ -260,7 +310,7 @@ references, so a change can be shown to help rather than assumed to:
 
 ```bash
 uv pip install -e '.[eval]'
-python -m evals.asr.run run --configs groq:whisper-large-v3,local:medium
+python -m evals.asr.run run --configs openrouter:openai/whisper-large-v3,local:medium
 python -m evals.asr.run score
 python -m evals.asr.run report
 ```
@@ -276,14 +326,15 @@ Anything can be tuned through `VidaConfig`, or the matching environment variable
 from vida import Vida, VidaConfig, ASRConfig
 
 config = VidaConfig(
-    asr=ASRConfig(backend="groq", chunk_seconds=300, concurrency=16),
+    asr=ASRConfig(backend="openrouter", chunk_seconds=300, concurrency=16),
 )
 vida = Vida(config)
 ```
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VIDA_ASR_MODEL` | backend default | Override the ASR model without touching code |
+| `VIDA_ASR_MODEL` | backend default | Process-wide ASR model; a per-call `model=` overrides it |
+| `VIDA_ASR_PROVIDER_OPTIONS` | none | JSON object of per-provider transcription options, keyed by OpenRouter provider slug |
 | `VIDA_ASR_AUDIO_FILTER` | denoise chain | ffmpeg filter applied during extraction; empty disables |
 | `VIDA_ASR_GLOSSARY` | none | Comma-separated terms to bias decoding toward |
 | `VIDA_ASR_DIALOGUE_FILTER` | none | ffmpeg filter run in the source channel layout, before the downmix |

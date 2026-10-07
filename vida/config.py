@@ -6,13 +6,14 @@ bare ``Vida()`` works once the relevant key is exported.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from typing import Literal
 
 from dotenv import find_dotenv, load_dotenv
 
-ASRBackend = Literal["groq", "openai", "local", "auto"]
+ASRBackend = Literal["openrouter", "openai", "local", "auto"]
 
 # Loaded once at import. `.env.secret` is the convention this repo already used;
 # `.env` is the one everyone else expects, so honour both. A bare relative name
@@ -66,6 +67,18 @@ def _env_list(name: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _env_json(name: str) -> dict:
+    """Parse a JSON object from an env var, ignoring anything that isn't one."""
+    raw = os.getenv(name)
+    if not raw or not raw.strip():
+        return {}
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 DEFAULT_AUDIO_FILTER = (
     # Band-limit to the speech range first: an action camera's wind rumble is
     # mostly below 100 Hz, and nothing above 7 kHz survives Whisper's 16 kHz
@@ -84,26 +97,55 @@ class ASRConfig:
     """Speech-to-text settings."""
 
     backend: ASRBackend = "auto"
-    """Which engine to use. ``auto`` picks the fastest one whose key is present."""
+    """Which engine to use. ``auto`` takes the first one that is configured, preferring
+    ``openrouter``."""
 
     model: str | None = field(default_factory=lambda: os.getenv("VIDA_ASR_MODEL"))
     """Backend-specific model id. ``None`` uses that backend's default.
 
-    Set ``VIDA_ASR_MODEL`` to override without touching code. On Groq the
-    choice that matters is the default ``whisper-large-v3`` against
-    ``whisper-large-v3-turbo``: turbo is a distilled decoder (4 layers rather
-    than 32) and gives up real accuracy on accented and non-English speech in
-    exchange for speed both are already fast enough at.
+    Nothing here is tied to a particular model: the id is a string the backend
+    passes straight to the provider, so a model published after this release
+    works without a code change. It resolves in three layers, narrowest first —
+    the ``model=`` argument on a single call, this field, the backend default —
+    which is what lets a server choose per request from its own payload while a
+    single pooled client serves every caller.
+
+    Set ``VIDA_ASR_MODEL`` to move the process-wide default. On ``openrouter``
+    the choice that matters is ``openai/whisper-large-v3`` against
+    ``openai/whisper-large-v3-turbo``: turbo is a distilled decoder (4 layers
+    rather than 32) and gives up real accuracy on accented and non-English
+    speech in exchange for speed both are already fast enough at.
 
     On ``local`` the default is ``small``, chosen for interactive latency on a
     CPU. Batch work is the opposite trade: for a movie nobody is waiting on,
     ``medium`` or ``large-v3`` is the single cheapest accuracy improvement
-    available here, and it costs no new configuration — this one field feeds
-    every backend.
+    available here.
     """
 
-    groq_api_key: str | None = field(default_factory=lambda: os.getenv("GROQ_API_KEY"))
+    openrouter_api_key: str | None = field(
+        default_factory=lambda: os.getenv("OPENROUTER_API_KEY")
+    )
+    """Key for the hosted ``openrouter`` backend.
+
+    Kept here as well as on :class:`VidaConfig` because a backend is built from
+    an :class:`ASRConfig` alone; :meth:`VidaConfig.__post_init__` keeps the two
+    in step, so setting either one is enough.
+    """
+
     openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+
+    provider_options: dict = field(
+        default_factory=lambda: _env_json("VIDA_ASR_PROVIDER_OPTIONS")
+    )
+    """Per-provider transcription options, keyed by OpenRouter provider slug.
+
+    Sent verbatim as ``provider.options`` and merged with what Vida sets
+    itself. OpenRouter's transcription endpoint takes no routing preferences
+    (``only``/``order``/``ignore`` are ignored there), so this is the whole of
+    the provider surface: it exists because the one feature Whisper has for
+    vocabulary — the free-text ``prompt`` — is a provider option rather than a
+    top-level field. ``VIDA_ASR_PROVIDER_OPTIONS`` takes a JSON object.
+    """
 
     glossary: list[str] = field(default_factory=lambda: _env_list("VIDA_ASR_GLOSSARY"))
     """Names and jargon to bias decoding toward; ``VIDA_ASR_GLOSSARY`` is comma-separated.
@@ -268,6 +310,14 @@ class VidaConfig:
         default_factory=lambda: os.getenv("VIDA_WORK_DIR", "") or ""
     )
     """Scratch directory for extracted audio and video chunks. Empty means a temp dir."""
+
+    def __post_init__(self) -> None:
+        # One provider, one key: someone who passed it here should not also
+        # have to repeat it on the nested ASR config to get transcription.
+        if self.openrouter_api_key and not self.asr.openrouter_api_key:
+            self.asr.openrouter_api_key = self.openrouter_api_key
+        elif self.asr.openrouter_api_key and not self.openrouter_api_key:
+            self.openrouter_api_key = self.asr.openrouter_api_key
 
     @classmethod
     def from_env(cls) -> VidaConfig:

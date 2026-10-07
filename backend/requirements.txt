@@ -1,6 +1,6 @@
 # The pipeline itself lives in the `vida` SDK at the repo root.
 # Installed editable so backend changes and SDK changes stay in sync.
--e ../[groq,agent]
+-e ../[agent]
 
 fastapi>=0.115
 uvicorn[standard]>=0.30

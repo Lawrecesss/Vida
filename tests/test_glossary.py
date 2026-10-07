@@ -75,6 +75,7 @@ class RecordingTranscriber(Transcriber):
     def __init__(self, config):
         super().__init__(config)
         self.prompts: list[str | None] = []
+        self.models: list[str] = []
 
     @property
     def default_model(self):
@@ -83,8 +84,9 @@ class RecordingTranscriber(Transcriber):
     def is_available(self):
         return True, ""
 
-    async def transcribe_file(self, audio_path, *, language=None, prompt=None):
+    async def transcribe_file(self, audio_path, *, language=None, prompt=None, model=None):
         self.prompts.append(prompt)
+        self.models.append(self.model_for(model))
         return Transcript(
             language="en",
             segments=[Segment(id=0, start=0.0, end=1.0, text="hello")],

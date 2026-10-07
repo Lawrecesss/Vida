@@ -36,11 +36,17 @@ async def transcribe_audio_file(
     language: str | None = None,
     prompt: str | None = None,
     glossary: list[str] | None = None,
+    model: str | None = None,
     work_dir: str | None = None,
     source: str | None = None,
     probe_source: str | None = None,
 ) -> Transcript:
-    """Transcribe an audio file of any length, in parallel where it helps."""
+    """Transcribe an audio file of any length, in parallel where it helps.
+
+    ``model`` overrides the configured one for this call and every chunk it
+    fans out to, including the language probe — one file is transcribed by one
+    model or the number means nothing.
+    """
     # The one choke point both the single- and multi-chunk paths funnel through,
     # so the vocabulary prompt is assembled once here rather than per chunk.
     # Every chunk gets the same prompt: each is its own request with no memory
@@ -59,6 +65,7 @@ async def transcribe_audio_file(
             probe_source or audio_path,
             duration,
             config,
+            model=model,
             work_dir=work_dir,
         )
 
@@ -74,7 +81,7 @@ async def transcribe_audio_file(
 
     if len(chunks) == 1:
         transcript = await transcriber.transcribe_file(
-            chunks[0].path, language=language, prompt=prompt
+            chunks[0].path, language=language, prompt=prompt, model=model
         )
         transcript.source = source or audio_path
         if not transcript.duration:
@@ -93,7 +100,7 @@ async def transcribe_audio_file(
     async def _one(chunk: AudioChunk) -> tuple[AudioChunk, Transcript]:
         async with semaphore:
             result = await transcriber.transcribe_file(
-                chunk.path, language=language, prompt=prompt
+                chunk.path, language=language, prompt=prompt, model=model
             )
         return chunk, result
 
@@ -201,6 +208,7 @@ async def detect_language(
     duration: float,
     config: ASRConfig,
     *,
+    model: str | None = None,
     work_dir: str | None = None,
 ) -> str | None:
     """Decide once what language the audio is in, so every window agrees.
@@ -240,7 +248,7 @@ async def detect_language(
     )
     try:
         await cut_audio(audio_path, probe_path, 0.0, probe_seconds, timeout=config.timeout)
-        transcript = await transcriber.transcribe_file(probe_path)
+        transcript = await transcriber.transcribe_file(probe_path, model=model)
     except (VidaError, OSError):
         # Detection is an optimisation; losing it must never lose the transcript.
         return None

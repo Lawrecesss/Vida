@@ -1,7 +1,7 @@
 """CLI driver for transcription accuracy.
 
     python -m evals.asr.run run    --manifest evals/asr/fixtures/manifest.json \
-        --configs groq:whisper-large-v3,local:small,local:medium --out evals/asr/results
+        --configs openrouter:openai/whisper-large-v3,local:medium --out evals/asr/results
     python -m evals.asr.run score  --manifest evals/asr/fixtures/manifest.json \
         --out evals/asr/results
     python -m evals.asr.run report --out evals/asr/results
@@ -66,7 +66,9 @@ def _parse_configs(spec: str, args) -> list[tuple[str, ASRConfig]]:
         configs.append((label, config))
 
     if not configs:
-        raise SystemExit("No configs given — pass e.g. --configs groq:whisper-large-v3")
+        raise SystemExit(
+            "No configs given — pass e.g. --configs openrouter:openai/whisper-large-v3"
+        )
     return configs
 
 
@@ -216,7 +218,8 @@ def main() -> int:
     run.add_argument("--out", default="evals/asr/results")
     run.add_argument(
         "--configs", default="auto",
-        help="Comma-separated backend[:model] specs, e.g. groq:whisper-large-v3,local:medium.",
+        help="Comma-separated backend[:model] specs, e.g. "
+        "openrouter:openai/whisper-large-v3,local:medium.",
     )
     run.add_argument("--prompt", default=None, help="Free-text vocabulary hint for every fixture.")
     run.add_argument(

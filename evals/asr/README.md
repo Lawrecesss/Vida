@@ -22,7 +22,7 @@ uv pip install -e '.[eval]'     # adds jiwer
 
 ```bash
 # 1. Transcribe. Cached per (fixture, config) — re-runs cost nothing.
-python -m evals.asr.run run --configs groq:whisper-large-v3,local:small,local:medium
+python -m evals.asr.run run --configs openrouter:openai/whisper-large-v3,local:medium
 
 # 2. Score the cached hypotheses. Free and offline.
 python -m evals.asr.run score

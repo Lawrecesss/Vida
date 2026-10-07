@@ -2,13 +2,13 @@
 
 import pytest
 
-from vida.asr.groq_backend import _logprob_to_confidence, _to_transcript
+from vida.asr.whisper_response import logprob_to_confidence, to_transcript
 from vida.errors import VidaError
 from vida.llm import _extract_text, strip_reasoning
 
 
 def test_verbose_json_becomes_a_transcript():
-    transcript = _to_transcript(
+    transcript = to_transcript(
         {
             "language": "en",
             "duration": 4.2,
@@ -19,7 +19,7 @@ def test_verbose_json_becomes_a_transcript():
             ],
         },
         "a.flac",
-        "groq",
+        "openrouter",
     )
     assert [s.text for s in transcript.segments] == ["hello", "world"]
     assert transcript.language == "en"
@@ -28,17 +28,17 @@ def test_verbose_json_becomes_a_transcript():
 
 
 def test_blank_segments_are_dropped():
-    transcript = _to_transcript(
+    transcript = to_transcript(
         {"segments": [{"start": 0, "end": 1, "text": "   "}, {"start": 1, "end": 2, "text": "hi"}]},
         "a.flac",
-        "groq",
+        "openrouter",
     )
     assert len(transcript.segments) == 1
 
 
 def test_response_without_segments_falls_back_to_flat_text():
-    transcript = _to_transcript(
-        {"text": "just the text", "duration": 3.0, "language": "en"}, "a.flac", "groq"
+    transcript = to_transcript(
+        {"text": "just the text", "duration": 3.0, "language": "en"}, "a.flac", "openrouter"
     )
     assert len(transcript.segments) == 1
     assert transcript.segments[0].text == "just the text"
@@ -55,16 +55,16 @@ def test_object_style_responses_work_too():
         def __init__(self):
             self.segments = [Segment()]
 
-    transcript = _to_transcript(Response(), "a.flac", "openai")
+    transcript = to_transcript(Response(), "a.flac", "openai")
     assert transcript.language == "fr"
     assert transcript.segments[0].text == "hi"
 
 
 def test_confidence_is_clamped_and_none_safe():
-    assert _logprob_to_confidence(None) is None
-    assert _logprob_to_confidence("bad") is None
-    assert _logprob_to_confidence(0.0) == 1.0
-    assert 0.0 <= _logprob_to_confidence(-5.0) <= 1.0
+    assert logprob_to_confidence(None) is None
+    assert logprob_to_confidence("bad") is None
+    assert logprob_to_confidence(0.0) == 1.0
+    assert 0.0 <= logprob_to_confidence(-5.0) <= 1.0
 
 
 def test_strip_reasoning_removes_closed_blocks():

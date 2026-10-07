@@ -12,8 +12,8 @@ import asyncio
 import logging
 
 from vida.asr.base import Transcriber
-from vida.asr.groq_backend import _logprob_to_confidence
 from vida.asr.silence import is_repetition_loop, is_silence
+from vida.asr.whisper_response import logprob_to_confidence
 from vida.errors import MissingDependencyError, TranscriptionError
 from vida.types import Segment, Transcript
 
@@ -92,9 +92,9 @@ class LocalTranscriber(Transcriber):
         # nobody is — a movie processed overnight, anything scored by the
         # accuracy harness in evals/asr — `VIDA_ASR_MODEL=medium` or
         # `large-v3` is a straight accuracy win and needs no code change:
-        # `Transcriber.model` resolves `config.model or default_model` for
-        # every backend. Expect roughly 2x the wall clock per tier on CPU,
-        # much less on a GPU.
+        # `Transcriber.model_for` resolves call > config > default for every
+        # backend. Expect roughly 2x the wall clock per tier on CPU, much less
+        # on a GPU.
         return "small"
 
     def is_available(self) -> tuple[bool, str]:
@@ -113,9 +113,9 @@ class LocalTranscriber(Transcriber):
             return configured
         return _DEFAULT_COMPUTE.get(device, "int8")
 
-    async def _load(self, device: str):
-        """Build (or reuse) a model on `device`. Caller holds the cache lock."""
-        key = (self.model, device, self._compute_type(device))
+    async def _load(self, device: str, model: str):
+        """Build (or reuse) `model` on `device`. Caller holds the cache lock."""
+        key = (model, device, self._compute_type(device))
         if key not in _MODEL_CACHE:
             if device == "cuda":
                 _preload_cuda_libraries()
@@ -127,25 +127,25 @@ class LocalTranscriber(Transcriber):
             # Loading pulls weights from disk (or the network on first run);
             # keep it off the event loop.
             _MODEL_CACHE[key] = await asyncio.to_thread(
-                WhisperModel, self.model, device=device, compute_type=key[2]
+                WhisperModel, model, device=device, compute_type=key[2]
             )
         return _MODEL_CACHE[key]
 
-    async def _get_model(self):
+    async def _get_model(self, model: str):
         global _AUTO_DEVICE
 
         configured = self.config.local_device
         if configured != "auto":
             async with _CACHE_LOCK:
-                return await self._load(configured)
+                return await self._load(configured, model)
 
         async with _CACHE_LOCK:
             if _AUTO_DEVICE is not None:
-                return await self._load(_AUTO_DEVICE)
+                return await self._load(_AUTO_DEVICE, model)
 
             # Prefer the GPU, but never let its absence be fatal.
             try:
-                model = await self._load("cuda")
+                loaded = await self._load("cuda", model)
             except Exception as exc:
                 if not _is_cuda_failure(exc):
                     raise
@@ -155,24 +155,24 @@ class LocalTranscriber(Transcriber):
                     exc,
                 )
                 _AUTO_DEVICE = "cpu"
-                return await self._load("cpu")
+                return await self._load("cpu", model)
 
             _AUTO_DEVICE = "cuda"
-            return model
+            return loaded
 
-    async def _demote_to_cpu(self, exc: Exception):
+    async def _demote_to_cpu(self, exc: Exception, model: str):
         """Drop the unusable GPU model and return a CPU one in its place."""
         global _AUTO_DEVICE
 
         async with _CACHE_LOCK:
-            _MODEL_CACHE.pop((self.model, "cuda", self._compute_type("cuda")), None)
+            _MODEL_CACHE.pop((model, "cuda", self._compute_type("cuda")), None)
             _AUTO_DEVICE = "cpu"
             logger.warning(
                 "GPU transcription failed (%s); retrying on the CPU. "
                 "Set VIDA_LOCAL_DEVICE=cpu to skip this probe.",
                 exc,
             )
-            return await self._load("cpu")
+            return await self._load("cpu", model)
 
     async def transcribe_file(
         self,
@@ -180,8 +180,10 @@ class LocalTranscriber(Transcriber):
         *,
         language: str | None = None,
         prompt: str | None = None,
+        model: str | None = None,
     ) -> Transcript:
-        model = await self._get_model()
+        name = self.model_for(model)
+        loaded = await self._get_model(name)
 
         def _run(active):
             segments, info = active.transcribe(
@@ -196,7 +198,7 @@ class LocalTranscriber(Transcriber):
             return list(segments), info
 
         try:
-            raw_segments, info = await asyncio.to_thread(_run, model)
+            raw_segments, info = await asyncio.to_thread(_run, loaded)
         except Exception as exc:
             # CTranslate2 loads cuBLAS on first use, so a GPU we picked
             # ourselves can fail here rather than at load time. An explicit
@@ -204,9 +206,9 @@ class LocalTranscriber(Transcriber):
             if self.config.local_device != "auto" or not _is_cuda_failure(exc):
                 raise TranscriptionError(f"Local transcription failed: {exc}") from exc
 
-            model = await self._demote_to_cpu(exc)
+            loaded = await self._demote_to_cpu(exc, name)
             try:
-                raw_segments, info = await asyncio.to_thread(_run, model)
+                raw_segments, info = await asyncio.to_thread(_run, loaded)
             except Exception as retry_exc:
                 raise TranscriptionError(
                     f"Local transcription failed on the CPU fallback: {retry_exc}"
@@ -217,7 +219,7 @@ class LocalTranscriber(Transcriber):
             text = (item.text or "").strip()
             if not text:
                 continue
-            confidence = _logprob_to_confidence(getattr(item, "avg_logprob", None))
+            confidence = logprob_to_confidence(getattr(item, "avg_logprob", None))
             if is_silence(
                 getattr(item, "no_speech_prob", None),
                 confidence,

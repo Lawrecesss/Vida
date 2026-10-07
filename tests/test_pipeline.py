@@ -32,6 +32,7 @@ class StubTranscriber(Transcriber):
     def __init__(self, config):
         super().__init__(config)
         self.seen: list[str] = []
+        self.models: list[str] = []
 
     @property
     def default_model(self):
@@ -40,8 +41,9 @@ class StubTranscriber(Transcriber):
     def is_available(self):
         return True, ""
 
-    async def transcribe_file(self, audio_path, *, language=None, prompt=None):
+    async def transcribe_file(self, audio_path, *, language=None, prompt=None, model=None):
         self.seen.append(audio_path)
+        self.models.append(self.model_for(model))
         duration = probe(audio_path).duration
         index = len(self.seen)
         return Transcript(
@@ -155,14 +157,16 @@ class LanguageStub(StubTranscriber):
         self.fail = fail
         self.hints: list[str | None] = []
 
-    async def transcribe_file(self, audio_path, *, language=None, prompt=None):
+    async def transcribe_file(self, audio_path, *, language=None, prompt=None, model=None):
         if self.fail and not self.hints:
             from vida.errors import TranscriptionError
 
             self.hints.append(language)
             raise TranscriptionError("detection blew up")
         self.hints.append(language)
-        transcript = await super().transcribe_file(audio_path, language=language, prompt=prompt)
+        transcript = await super().transcribe_file(
+            audio_path, language=language, prompt=prompt, model=model
+        )
         transcript.language = self.detected
         return transcript
 

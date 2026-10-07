@@ -26,10 +26,17 @@ def _build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("source", help="Path to the video or audio file.")
     common.add_argument(
-        "--asr", default=None, choices=["auto", "groq", "openai", "local"],
+        "--asr", default=None, choices=["auto", "openrouter", "openai", "local"],
         help="ASR backend (default: auto).",
     )
-    common.add_argument("--asr-model", default=None, help="Override the ASR model id.")
+    common.add_argument(
+        "--asr-model", default=None,
+        help="ASR model id, e.g. openai/whisper-large-v3-turbo. Passed to the backend as given.",
+    )
+    common.add_argument(
+        "--model", default=None, dest="llm_model",
+        help="Model id for the LLM stages — translation, and the analysis summary.",
+    )
     common.add_argument("--language", default=None, help="Source language hint, e.g. 'en'.")
     common.add_argument(
         "--prompt", default=None,
@@ -87,6 +94,9 @@ def _make_client(args) -> Vida:
         config.asr.backend = args.asr
     if getattr(args, "asr_model", None):
         config.asr.model = args.asr_model
+    if getattr(args, "llm_model", None):
+        config.translation.model = args.llm_model
+        config.analysis.synthesis_model = args.llm_model
     return Vida(config)
 
 

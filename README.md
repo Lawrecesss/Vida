@@ -249,6 +249,36 @@ noise otherwise pushes into the range where real speech and hallucinations are
 indistinguishable. Set `VIDA_ASR_AUDIO_FILTER=""` for clean studio audio, where
 the filtering only costs CPU.
 
+**Or let it measure the source.** That chain is fixed, and `afftdn=nf=-30`
+inside it asserts where the noise floor sits. A constant cannot be right for
+both a studio take and a windy one — mixing wind-like noise into one 120 s
+address at three levels put the real floor anywhere from -54 dB to -29 dB while
+the speech level barely moved:
+
+| | noise floor | speech | margin |
+|---|---|---|---|
+| clean | -53.9 dB | -29.0 dB | 24.9 dB |
+| + light noise | -48.8 dB | -28.9 dB | 19.9 dB |
+| + moderate noise | -38.3 dB | -28.5 dB | 9.8 dB |
+| + heavy noise | -28.7 dB | -25.7 dB | 2.9 dB |
+
+`VIDA_ASR_ADAPTIVE_DENOISE=true` measures that margin in one bounded ffmpeg
+pass over the source and builds the chain to match: no spectral denoising above
+20 dB, where it can only trade speech for artefacts; harder denoising below
+10 dB; and the floor it measured rather than the constant. Band-limiting and
+loudness normalisation always run.
+
+It is **off by default and not yet recommended**, because the measurement that
+would justify turning it on does not exist. A/B/C over those same clips put it
+ahead of the fixed chain in every condition and behind *unfiltered* audio on
+the heavy one, all by a handful of words out of 233 — differences smaller than
+the run-to-run spread of the hosted model on an identical request. Settle it
+with `evals/asr` on real fixtures before trusting it:
+
+```bash
+python -m evals.asr.run run --configs openrouter:openai/whisper-large-v3 --adaptive-denoise
+```
+
 **Pin the language.** Whisper decides on a language for every 30-second window,
 and on accented speech it changes its mind mid-file: half a recording comes
 back in English and the rest in a language that merely sounds like it, invented
@@ -337,6 +367,8 @@ vida = Vida(config)
 | `VIDA_ASR_PROVIDER_OPTIONS` | none | JSON object of per-provider transcription options, keyed by OpenRouter provider slug |
 | `VIDA_ASR_AUDIO_FILTER` | denoise chain | ffmpeg filter applied during extraction; empty disables |
 | `VIDA_ASR_GLOSSARY` | none | Comma-separated terms to bias decoding toward |
+| `VIDA_ASR_ADAPTIVE_DENOISE` | `false` | Build the denoise chain from the source's measured noise floor instead of using the fixed one |
+| `VIDA_ASR_NOISE_SAMPLE_SECONDS` | `120` | Seconds of source the measurement above listens to |
 | `VIDA_ASR_DIALOGUE_FILTER` | none | ffmpeg filter run in the source channel layout, before the downmix |
 | `VIDA_ASR_DETECT_SECONDS` | `30` | Audio sampled to pin the language up front; `0` disables |
 | `VIDA_ASR_CHUNK_SECONDS` | `600` | Audio longer than this is split |

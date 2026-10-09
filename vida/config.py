@@ -182,6 +182,39 @@ class ASRConfig:
     otherwise pushes into the range real speech and hallucinations share.
     """
 
+    adaptive_denoise: bool = field(
+        default_factory=lambda: _env_bool("VIDA_ASR_ADAPTIVE_DENOISE", False)
+    )
+    """Shape the denoise chain to the source instead of using :attr:`audio_filter` as written.
+
+    Off by default. When on, :mod:`vida.media.noise` measures the source's
+    noise floor and speech level in one bounded pass and builds the chain from
+    them — spectral denoising is skipped on audio clean enough that it could
+    only do harm, strengthened on audio noisy enough to mask consonants, and
+    told the floor it actually measured rather than :attr:`audio_filter`'s
+    constant ``nf=-30``. Measured spread of that real floor across one
+    recording with noise mixed in: -54 dB clean to -29 dB at 3 dB margin, so
+    the constant is wrong by 24 dB at one end.
+
+    Setting :attr:`audio_filter` to empty still means *no filtering* and wins
+    over this, so there is one unambiguous way to turn cleanup off.
+
+    A source that cannot be measured falls back to :attr:`audio_filter`
+    unchanged: running ahead of the one decode that matters is no reason to
+    transcribe raw audio.
+    """
+
+    noise_sample_seconds: float = field(
+        default_factory=lambda: _env_float("VIDA_ASR_NOISE_SAMPLE_SECONDS", 120.0)
+    )
+    """Seconds of source :attr:`adaptive_denoise` listens to before deciding.
+
+    Bounded because a noise floor is a property of the microphone and the room
+    rather than of the minute sampled, and this pass happens *before*
+    extraction — reading a whole feature would double its decode cost for no
+    more information.
+    """
+
     dialogue_filter: str | None = field(
         default_factory=lambda: os.getenv("VIDA_ASR_DIALOGUE_FILTER") or None
     )

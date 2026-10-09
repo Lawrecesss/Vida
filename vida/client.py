@@ -18,6 +18,7 @@ from vida.asr.pipeline import extract_audio_for, transcribe_audio_file
 from vida.config import AnalysisConfig, ASRBackend, TranslationConfig, VidaConfig
 from vida.errors import MediaError
 from vida.llm import OpenRouterClient
+from vida.media.noise import adaptive_filter, measure_noise
 from vida.media.video import probe
 from vida.translate.core import translate_text, translate_transcript
 from vida.types import Analysis, MediaInfo, Transcript, VideoInsight
@@ -487,6 +488,11 @@ class Vida:
         """Path to transcribable audio for ``media``, extracting it if needed."""
         audio_filter = self.config.asr.audio_filter
         dialogue_filter = self.config.asr.dialogue_filter
+        if audio_filter and self.config.asr.adaptive_denoise:
+            # An empty audio_filter is checked first on purpose: it is the
+            # explicit "do not clean this" and must not be resurrected by a
+            # second knob that happens to also be on.
+            audio_filter = await self._denoise_filter_for(media.path, audio_filter)
         extension = os.path.splitext(media.path)[1].lower()
         if extension in _AUDIO_EXTENSIONS:
             # Audio input normally skips the transcode entirely. A filter chain
@@ -506,6 +512,23 @@ class Vida:
             audio_filter=audio_filter,
             dialogue_filter=dialogue_filter,
         )
+
+    async def _denoise_filter_for(self, source: str, fallback: str) -> str:
+        """The denoise chain, shaped to what ``source`` actually sounds like.
+
+        Measured against the *unprocessed* source, for the same reason language
+        detection is (``probe_source``): the question is what the audio was
+        like before anything touched it. One bounded extra decode buys it, and
+        a source that reports nothing usable keeps ``fallback`` — the failure
+        direction has to be the chain that was already calibrated, not raw
+        audio.
+        """
+        profile = await measure_noise(
+            source, sample_seconds=self.config.asr.noise_sample_seconds
+        )
+        if profile is None:
+            return fallback
+        return adaptive_filter(profile)
 
     @contextlib.contextmanager
     def _work_dir(self):

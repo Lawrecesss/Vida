@@ -59,6 +59,9 @@ def _parse_configs(spec: str, args) -> list[tuple[str, ASRConfig]]:
         if args.no_audio_filter:
             config.audio_filter = ""
             label += "+rawaudio"
+        if args.adaptive_denoise:
+            config.adaptive_denoise = True
+            label += "+adaptive"
         if args.chunk_seconds:
             config.chunk_seconds = args.chunk_seconds
             label += f"+chunk{args.chunk_seconds:g}"
@@ -235,6 +238,10 @@ def main() -> int:
     )
     run.add_argument(
         "--no-audio-filter", action="store_true", help="Disable the denoise chain entirely."
+    )
+    run.add_argument(
+        "--adaptive-denoise", action="store_true",
+        help="Shape the denoise chain to each source's measured noise floor.",
     )
     run.add_argument("--chunk-seconds", type=float, default=None)
     run.add_argument("--force", action="store_true", help="Re-transcribe cached fixtures.")

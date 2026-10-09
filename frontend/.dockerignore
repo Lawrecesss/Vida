@@ -1,12 +1,2 @@
 node_modules
 .next
-out
-build
-.git
-.env*
-*.log
-npm-debug.log*
-Dockerfile
-.dockerignore
-AGENTS.md
-CLAUDE.md

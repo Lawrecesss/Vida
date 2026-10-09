@@ -1,10 +1,5 @@
-# Two services, two images, one network. The SDK is not a service — it is a
-# library compiled into the backend image, which is why the backend builds from
-# the repo root and the frontend from its own directory.
-#
-#   make up     production-ish: built images, no bind mounts
-#   make dev    overlays compose.dev.yaml for hot reload
-
+# Two services, one network. core/ is a library, not a service: it is installed
+# into the backend image, which is why that image builds from the repo root.
 name: vida
 
 services:
@@ -12,46 +7,24 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-      target: runtime
-    image: vida-backend:local
-    # Keys come in here because the SDK's own upward search for a .env finds
-    # nothing inside the container — neither file is in the build context.
-    # The long form needs Compose v2.24+; it is what makes a missing file OK.
     env_file:
       - path: .env
         required: false
-      - path: .env.secret
-        required: false
     environment:
-      VIDA_UPLOAD_DIR: /data/uploads
-      # CORS names the origin the *browser* sends, which is the published host
-      # port — not the frontend container, which the browser never talks to.
-      VIDA_CORS_ORIGINS: ${VIDA_CORS_ORIGINS:-http://localhost:${FRONTEND_PORT:-3000}}
+      # The origin the *browser* sends: the published frontend port.
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-3000}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
-    volumes:
-      # Uploads outlive a container: /process takes back the path /upload
-      # returned, so losing the file between the two calls breaks a run.
-      - uploads:/data/uploads
     restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
-      target: runner
       args:
-        # Baked into the client bundle at build time, so changing it means a
-        # rebuild, not a restart. See the note in frontend/Dockerfile.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1}
-    image: vida-frontend:local
+        NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
-      # The UI has nothing to show without the API, and /backends is the first
-      # thing it calls on load.
       backend:
         condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  uploads:

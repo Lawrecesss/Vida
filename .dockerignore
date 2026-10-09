@@ -1,35 +1,6 @@
-# The backend image builds from the repo root because it needs vida/, so
-# everything that is neither the SDK nor the service is dead weight in the
-# context. frontend/ is excluded here and has its own .dockerignore, since it
-# builds from its own directory.
+**/node_modules
+**/.next
+**/__pycache__
 .git
-.github
-.gitattributes
-
-.venv
-venv
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-.ruff_cache/
-build/
-dist/
-
-frontend/
-evals/
-tests/
-vids/
-
-# Keys reach the container through compose's env_file, never baked into a layer.
-.env
-.env.*
-
-*.md
-!README.md
-
-Dockerfile
-.dockerignore
-compose*.yaml
-Makefile
-uv.lock
+.env*
+frontend

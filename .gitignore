@@ -1,26 +1,6 @@
-# Python
 __pycache__/
-*.py[cod]
 *.egg-info/
 .venv/
-venv/
-build/
-dist/
-.pytest_cache/
-.ruff_cache/
-
-# Secrets
 .env
 .env.*
 !.env.example
-
-# Media scratch
-frames/
-*_segment_*.mp4
-*_chunk*.flac
-
-# Eval output (regenerable; the harness is the artifact, not the results)
-evals/results/
-
-# Context pasted into a Claude Project; regenerated from the repo, not a source of truth
-vida-project-context.md
